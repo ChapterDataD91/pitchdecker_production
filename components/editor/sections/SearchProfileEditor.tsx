@@ -1,12 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { v4 } from 'uuid'
 import type { SearchProfileSection, Criterion, Weight } from '@/lib/types'
-import type { AISuggestion } from '@/lib/ai-types'
-import { useEditorStore } from '@/lib/store/editor-store'
-import { useAIPanel } from '@/lib/hooks/useAIPanel'
-import AIPanel from '@/components/ai/AIPanel'
 
 interface SearchProfileEditorProps {
   data: SearchProfileSection
@@ -71,28 +66,6 @@ export default function SearchProfileEditor({
   data,
   onChange,
 }: SearchProfileEditorProps) {
-  const [aiPanelOpen, setAiPanelOpen] = useState(false)
-  const deck = useEditorStore((s) => s.deck)
-
-  const aiContext = {
-    sectionType: 'searchProfile',
-    clientName: deck?.clientName || '',
-    roleTitle: deck?.roleTitle || '',
-    existingData: { mustHaves: data.mustHaves, niceToHaves: data.niceToHaves },
-  }
-
-  const aiPanel = useAIPanel(aiContext)
-
-  // Auto-fill personality profile when AI generates one
-  useEffect(() => {
-    if (aiPanel.personalityProfile && (!data.personalityProfile.intro && data.personalityProfile.traits.length === 0)) {
-      onChange({
-        ...data,
-        personalityProfile: aiPanel.personalityProfile,
-      })
-    }
-  }, [aiPanel.personalityProfile]) // eslint-disable-line react-hooks/exhaustive-deps
-
   function addCriterion(column: 'mustHaves' | 'niceToHaves') {
     const newCriterion: Criterion = { id: v4(), text: '', weight: 3 }
     onChange({
@@ -112,46 +85,6 @@ export default function SearchProfileEditor({
     onChange({
       ...data,
       [column]: data[column].filter((c) => c.id !== id),
-    })
-  }
-
-  function handleAcceptSuggestion(suggestion: AISuggestion) {
-    aiPanel.acceptSuggestion(suggestion.id)
-    const criterion: Criterion = {
-      id: v4(),
-      text: suggestion.text,
-      weight: suggestion.weight,
-    }
-    const column = suggestion.category === 'mustHave' ? 'mustHaves' : 'niceToHaves'
-    onChange({
-      ...data,
-      [column]: [...data[column], criterion],
-    })
-  }
-
-  function handleAcceptAll() {
-    const pending = aiPanel.suggestions.filter((s) => s.status === 'pending')
-    const newMustHaves = [...data.mustHaves]
-    const newNiceToHaves = [...data.niceToHaves]
-
-    for (const suggestion of pending) {
-      const criterion: Criterion = {
-        id: v4(),
-        text: suggestion.text,
-        weight: suggestion.weight,
-      }
-      if (suggestion.category === 'mustHave') {
-        newMustHaves.push(criterion)
-      } else {
-        newNiceToHaves.push(criterion)
-      }
-    }
-
-    aiPanel.acceptAll()
-    onChange({
-      ...data,
-      mustHaves: newMustHaves,
-      niceToHaves: newNiceToHaves,
     })
   }
 
@@ -203,28 +136,8 @@ export default function SearchProfileEditor({
   }
 
   return (
-    <div className="flex gap-0">
-      {/* Editor content */}
-      <div className="flex-1 min-w-0">
-        {/* AI Assist toggle */}
-        <div className="flex items-center justify-end mb-4">
-          <button
-            type="button"
-            onClick={() => setAiPanelOpen(!aiPanelOpen)}
-            className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              aiPanelOpen
-                ? 'bg-accent text-white'
-                : 'border border-border text-text-secondary hover:text-accent hover:border-accent'
-            }`}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M8 1L10 5.5L15 6.5L11.5 10L12.5 15L8 12.5L3.5 15L4.5 10L1 6.5L6 5.5L8 1Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-            </svg>
-            AI Assist
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
+    <div>
+      <div className="grid grid-cols-2 gap-4">
           {renderColumn(
             'Must-Haves',
             'mustHaves',
@@ -328,37 +241,6 @@ export default function SearchProfileEditor({
             </button>
           </div>
         </div>
-      </div>
-
-      {/* AI Panel */}
-      <AIPanel
-        open={aiPanelOpen}
-        onClose={() => setAiPanelOpen(false)}
-        context={aiContext}
-        suggestions={aiPanel.suggestions}
-        isAnalyzing={aiPanel.isAnalyzing}
-        isAnalyzingDocument={aiPanel.isAnalyzingDocument}
-        isAnalyzingText={aiPanel.isAnalyzingText}
-        isSearchingWeb={aiPanel.isSearchingWeb}
-        isTranscribing={aiPanel.isTranscribing}
-        activeMode={aiPanel.activeMode}
-        transcript={aiPanel.transcript}
-        error={aiPanel.error}
-        onModeChange={aiPanel.setActiveMode}
-        onAnalyzeText={aiPanel.analyzeText}
-        onAnalyzeDocument={aiPanel.analyzeDocument}
-        onTranscribeAudio={aiPanel.transcribeAudio}
-        onAnalyzeTranscript={aiPanel.analyzeTranscript}
-        onTranscriptChange={aiPanel.setTranscript}
-        onWebSearch={aiPanel.webSearch}
-        onAccept={(id) => {
-          const suggestion = aiPanel.suggestions.find((s) => s.id === id)
-          if (suggestion) handleAcceptSuggestion(suggestion)
-        }}
-        onDismiss={aiPanel.dismissSuggestion}
-        onAcceptAll={handleAcceptAll}
-        onDismissAll={aiPanel.dismissAll}
-      />
     </div>
   )
 }

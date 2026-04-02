@@ -1,16 +1,20 @@
 'use client'
 
-import { useEffect, use } from 'react'
+import { useEffect, useCallback, use } from 'react'
 import { useRouter } from 'next/navigation'
+import { v4 } from 'uuid'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEditorStore } from '@/lib/store/editor-store'
+import { useAIStore } from '@/lib/store/ai-store'
 import { SECTIONS } from '@/lib/theme'
 import type { SectionId } from '@/lib/theme'
-import type { DeckSections } from '@/lib/types'
+import type { DeckSections, Criterion, SearchProfileSection } from '@/lib/types'
 import TopBar from '@/components/layout/TopBar'
 import Sidebar from '@/components/layout/Sidebar'
 import SectionHeader from '@/components/editor/SectionHeader'
 import LoadingDots from '@/components/ui/LoadingDots'
+import AIPanel from '@/components/ai/AIPanel'
+import AIChatTrigger from '@/components/ai/AIChatTrigger'
 
 // Section editors
 import CoverEditor from '@/components/editor/sections/CoverEditor'
@@ -63,6 +67,10 @@ export default function DeckEditorPage({
     getCompletedCount,
   } = useEditorStore()
 
+  const initChat = useAIStore((s) => s.initChat)
+  const addSectionDivider = useAIStore((s) => s.addSectionDivider)
+  const persistChat = useAIStore((s) => s.persistChat)
+
   // Fetch deck on mount
   useEffect(() => {
     async function loadDeck() {
@@ -81,6 +89,37 @@ export default function DeckEditorPage({
 
     loadDeck()
   }, [id, setDeck, setLoading, setError])
+
+  // Initialize chat when deck loads
+  useEffect(() => {
+    if (deck) {
+      initChat(id)
+    }
+  }, [deck, id, initChat])
+
+  // Add section divider to chat when switching sections
+  useEffect(() => {
+    addSectionDivider(activeSection as SectionId)
+  }, [activeSection, addSectionDivider])
+
+  // Persist chat on unmount
+  useEffect(() => {
+    return () => {
+      persistChat()
+    }
+  }, [persistChat])
+
+  // Keyboard shortcut: Cmd+Shift+A to toggle AI panel
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.metaKey && e.shiftKey && e.key === 'a') {
+        e.preventDefault()
+        useAIStore.getState().togglePanel()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   // Build sidebar section data
   const sidebarSections = SECTIONS.map((section) => ({
@@ -106,6 +145,51 @@ export default function DeckEditorPage({
   // Section data change handler
   function handleSectionChange(data: DeckSections[keyof DeckSections]) {
     updateSection(activeSection as keyof DeckSections, data as Partial<DeckSections[keyof DeckSections]>)
+  }
+
+  // AI Tools accept handler — adds accepted suggestion to current section data
+  const handleToolsAccept = useCallback((id: string) => {
+    if (!deck) return
+    const suggestion = useAIStore.getState().toolsSuggestions.find((s) => s.id === id)
+    if (!suggestion) return
+
+    if (activeSection === 'searchProfile') {
+      const section = deck.sections.searchProfile
+      const criterion: Criterion = { id: v4(), text: suggestion.text, weight: suggestion.weight }
+      const column = suggestion.category === 'mustHave' ? 'mustHaves' : 'niceToHaves'
+      updateSection('searchProfile', { [column]: [...section[column], criterion] })
+    }
+  }, [deck, activeSection, updateSection])
+
+  const handleToolsAcceptAll = useCallback(() => {
+    if (!deck) return
+    const pending = useAIStore.getState().toolsSuggestions.filter((s) => s.status === 'pending')
+    if (pending.length === 0) return
+
+    if (activeSection === 'searchProfile') {
+      const section = deck.sections.searchProfile
+      const newMustHaves = [...section.mustHaves]
+      const newNiceToHaves = [...section.niceToHaves]
+
+      for (const suggestion of pending) {
+        const criterion: Criterion = { id: v4(), text: suggestion.text, weight: suggestion.weight }
+        if (suggestion.category === 'mustHave') {
+          newMustHaves.push(criterion)
+        } else {
+          newNiceToHaves.push(criterion)
+        }
+      }
+
+      updateSection('searchProfile', { mustHaves: newMustHaves, niceToHaves: newNiceToHaves })
+    }
+  }, [deck, activeSection, updateSection])
+
+  // AI context for tools mode
+  const aiContext = {
+    sectionType: activeSection,
+    clientName: deck?.sections.cover.clientName ?? '',
+    roleTitle: deck?.sections.cover.roleTitle ?? '',
+    existingData: deck ? deck.sections[activeSection as keyof DeckSections] : undefined,
   }
 
   // Loading state
@@ -202,6 +286,16 @@ export default function DeckEditorPage({
           </div>
         </main>
       </div>
+
+      {/* AI Panel — outside AnimatePresence, persists across section switches */}
+      <AIPanel
+        context={aiContext}
+        onToolsAccept={handleToolsAccept}
+        onToolsAcceptAll={handleToolsAcceptAll}
+      />
+
+      {/* Floating trigger */}
+      <AIChatTrigger />
     </div>
   )
 }

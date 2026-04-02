@@ -1,4 +1,9 @@
-import type { Weight } from './types'
+import type { Weight, DeckSections } from './types'
+import type { SectionId } from './theme'
+
+// ---------------------------------------------------------------------------
+// Tools mode types (existing)
+// ---------------------------------------------------------------------------
 
 export type AISuggestionStatus = 'pending' | 'accepted' | 'dismissed'
 
@@ -34,4 +39,63 @@ export interface AIAnalysisResponse {
   }>
   personalityProfile?: AIPersonalityProfile
   summary?: string
+}
+
+// ---------------------------------------------------------------------------
+// Panel mode
+// ---------------------------------------------------------------------------
+
+export type AIPanelMode = 'tools' | 'chat'
+
+// ---------------------------------------------------------------------------
+// Chat types
+// ---------------------------------------------------------------------------
+
+export type ChatRole = 'user' | 'assistant'
+
+export interface ProposedChange {
+  id: string
+  sectionKey: keyof DeckSections
+  description: string
+  patch: Partial<DeckSections[keyof DeckSections]>
+  status: 'pending' | 'accepted' | 'dismissed'
+}
+
+export interface ChatMessage {
+  type: 'message'
+  id: string
+  role: ChatRole
+  content: string
+  sectionId: SectionId
+  timestamp: string
+  proposedChanges?: ProposedChange[]
+  isStreaming?: boolean
+}
+
+export interface SectionDivider {
+  type: 'section-divider'
+  sectionId: SectionId
+  sectionLabel: string
+  timestamp: string
+}
+
+export type ChatEntry = ChatMessage | SectionDivider
+
+// ---------------------------------------------------------------------------
+// Chat API types
+// ---------------------------------------------------------------------------
+
+export interface ChatContext {
+  sectionType: SectionId
+  sectionData: unknown
+  clientName: string
+  roleTitle: string
+  deckSummary: string
+}
+
+export interface ChatStreamEvent {
+  type: 'text_delta' | 'tool_use' | 'done' | 'error'
+  text?: string
+  proposedChanges?: ProposedChange[]
+  message?: string
 }

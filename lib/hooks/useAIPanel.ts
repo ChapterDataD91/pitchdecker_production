@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useCallback } from 'react'
 import { v4 } from 'uuid'
+import { useAIStore } from '@/lib/store/ai-store'
 import type {
   AISuggestion,
   AIInputMode,
@@ -53,22 +54,12 @@ function mapResponseToSuggestions(
 }
 
 export function useAIPanel(context: AISectionContext): UseAIPanelReturn {
-  const [suggestions, setSuggestions] = useState<AISuggestion[]>([])
-  const [isAnalyzingDocument, setIsAnalyzingDocument] = useState(false)
-  const [isAnalyzingText, setIsAnalyzingText] = useState(false)
-  const [isSearchingWeb, setIsSearchingWeb] = useState(false)
-  const [isTranscribing, setIsTranscribing] = useState(false)
-  const [activeMode, setActiveMode] = useState<AIInputMode>('text')
-  const [error, setError] = useState<string | null>(null)
-  const [transcript, setTranscript] = useState<string | null>(null)
-  const [personalityProfile, setPersonalityProfile] = useState<AIPersonalityProfile | null>(null)
-
-  const clearError = useCallback(() => setError(null), [])
+  const store = useAIStore()
 
   const analyzeText = useCallback(
     async (text: string, instruction?: string) => {
-      setIsAnalyzingText(true)
-      setError(null)
+      store.setToolsAnalyzingText(true)
+      store.setToolsError(null)
       try {
         const res = await fetch('/api/ai/analyze-text', {
           method: 'POST',
@@ -80,21 +71,21 @@ export function useAIPanel(context: AISectionContext): UseAIPanelReturn {
         }
         const data: AIAnalysisResponse = await res.json()
         const newSuggestions = mapResponseToSuggestions(data)
-        setSuggestions((prev) => [...prev, ...newSuggestions])
-        if (data.personalityProfile) setPersonalityProfile(data.personalityProfile)
+        store.addToolsSuggestions(newSuggestions)
+        if (data.personalityProfile) store.setToolsPersonalityProfile(data.personalityProfile)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Text analysis failed')
+        store.setToolsError(err instanceof Error ? err.message : 'Text analysis failed')
       } finally {
-        setIsAnalyzingText(false)
+        store.setToolsAnalyzingText(false)
       }
     },
-    [context],
+    [context, store],
   )
 
   const analyzeDocument = useCallback(
     async (file: File, instruction?: string) => {
-      setIsAnalyzingDocument(true)
-      setError(null)
+      store.setToolsAnalyzingDocument(true)
+      store.setToolsError(null)
       try {
         const formData = new FormData()
         formData.append('file', file)
@@ -110,22 +101,22 @@ export function useAIPanel(context: AISectionContext): UseAIPanelReturn {
         }
         const data: AIAnalysisResponse = await res.json()
         const newSuggestions = mapResponseToSuggestions(data)
-        setSuggestions((prev) => [...prev, ...newSuggestions])
-        if (data.personalityProfile) setPersonalityProfile(data.personalityProfile)
+        store.addToolsSuggestions(newSuggestions)
+        if (data.personalityProfile) store.setToolsPersonalityProfile(data.personalityProfile)
       } catch (err) {
-        setError(
+        store.setToolsError(
           err instanceof Error ? err.message : 'Document analysis failed',
         )
       } finally {
-        setIsAnalyzingDocument(false)
+        store.setToolsAnalyzingDocument(false)
       }
     },
-    [context],
+    [context, store],
   )
 
   const transcribeAudio = useCallback(async (audioBlob: Blob) => {
-    setIsTranscribing(true)
-    setError(null)
+    store.setToolsTranscribing(true)
+    store.setToolsError(null)
     try {
       const formData = new FormData()
       formData.append('audio', audioBlob)
@@ -138,18 +129,18 @@ export function useAIPanel(context: AISectionContext): UseAIPanelReturn {
         throw new Error(`Transcription failed: ${res.statusText}`)
       }
       const data = await res.json()
-      setTranscript(data.transcript)
+      store.setToolsTranscript(data.transcript)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Transcription failed')
+      store.setToolsError(err instanceof Error ? err.message : 'Transcription failed')
     } finally {
-      setIsTranscribing(false)
+      store.setToolsTranscribing(false)
     }
-  }, [])
+  }, [store])
 
   const webSearch = useCallback(
     async (query: string, instruction?: string) => {
-      setIsSearchingWeb(true)
-      setError(null)
+      store.setToolsSearchingWeb(true)
+      store.setToolsError(null)
       try {
         const res = await fetch('/api/ai/web-search', {
           method: 'POST',
@@ -161,85 +152,51 @@ export function useAIPanel(context: AISectionContext): UseAIPanelReturn {
         }
         const data: AIAnalysisResponse = await res.json()
         const newSuggestions = mapResponseToSuggestions(data)
-        setSuggestions((prev) => [...prev, ...newSuggestions])
-        if (data.personalityProfile) setPersonalityProfile(data.personalityProfile)
+        store.addToolsSuggestions(newSuggestions)
+        if (data.personalityProfile) store.setToolsPersonalityProfile(data.personalityProfile)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Web search failed')
+        store.setToolsError(err instanceof Error ? err.message : 'Web search failed')
       } finally {
-        setIsSearchingWeb(false)
+        store.setToolsSearchingWeb(false)
       }
     },
-    [context],
+    [context, store],
   )
 
   const analyzeTranscript = useCallback(async () => {
-    if (!transcript) {
-      setError('No transcript available to analyze')
+    if (!store.toolsTranscript) {
+      store.setToolsError('No transcript available to analyze')
       return
     }
-    await analyzeText(transcript)
-  }, [transcript, analyzeText])
-
-  const acceptSuggestion = useCallback((id: string) => {
-    setSuggestions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, status: 'accepted' as const } : s)),
-    )
-  }, [])
-
-  const dismissSuggestion = useCallback((id: string) => {
-    setSuggestions((prev) =>
-      prev.map((s) =>
-        s.id === id ? { ...s, status: 'dismissed' as const } : s,
-      ),
-    )
-  }, [])
-
-  const acceptAll = useCallback(() => {
-    setSuggestions((prev) =>
-      prev.map((s) =>
-        s.status === 'pending' ? { ...s, status: 'accepted' as const } : s,
-      ),
-    )
-  }, [])
-
-  const dismissAll = useCallback(() => {
-    setSuggestions((prev) =>
-      prev.map((s) =>
-        s.status === 'pending' ? { ...s, status: 'dismissed' as const } : s,
-      ),
-    )
-  }, [])
-
-  const clearSuggestions = useCallback(() => {
-    setSuggestions([])
-  }, [])
+    await analyzeText(store.toolsTranscript)
+  }, [store, analyzeText])
 
   return {
-    // State
-    suggestions,
-    isAnalyzing: isAnalyzingDocument || isAnalyzingText || isSearchingWeb,
-    isAnalyzingDocument,
-    isAnalyzingText,
-    isSearchingWeb,
-    isTranscribing,
-    activeMode,
-    error,
-    transcript,
-    personalityProfile,
+    // State (read from store)
+    suggestions: store.toolsSuggestions,
+    isAnalyzing: store.toolsIsAnalyzingDocument || store.toolsIsAnalyzingText || store.toolsIsSearchingWeb,
+    isAnalyzingDocument: store.toolsIsAnalyzingDocument,
+    isAnalyzingText: store.toolsIsAnalyzingText,
+    isSearchingWeb: store.toolsIsSearchingWeb,
+    isTranscribing: store.toolsIsTranscribing,
+    activeMode: store.toolsActiveMode,
+    error: store.toolsError,
+    transcript: store.toolsTranscript,
+    personalityProfile: store.toolsPersonalityProfile,
 
     // Actions
-    setActiveMode,
+    setActiveMode: store.setToolsActiveMode,
     analyzeText,
     analyzeDocument,
     transcribeAudio,
     webSearch,
     analyzeTranscript,
-    setTranscript,
-    acceptSuggestion,
-    dismissSuggestion,
-    acceptAll,
-    dismissAll,
-    clearSuggestions,
-    clearError,
+    setTranscript: (text: string) => store.setToolsTranscript(text),
+    acceptSuggestion: store.acceptToolsSuggestion,
+    dismissSuggestion: store.dismissToolsSuggestion,
+    acceptAll: store.acceptAllToolsSuggestions,
+    dismissAll: store.dismissAllToolsSuggestions,
+    clearSuggestions: store.clearToolsSuggestions,
+    clearError: () => store.setToolsError(null),
   }
 }
