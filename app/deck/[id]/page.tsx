@@ -174,7 +174,7 @@ export default function DeckEditorPage({
 
         {/* Content area */}
         <main className="flex-1 overflow-y-auto bg-bg-subtle">
-          <div className="mx-auto max-w-3xl px-10 py-8">
+          <div className="mx-auto max-w-5xl px-10 py-8">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeSection}

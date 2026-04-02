@@ -49,6 +49,7 @@ export interface CoverSection {
 
 export interface TeamMember {
   id: string
+  algoliaId: string
   name: string
   title: string
   photoUrl: string
@@ -62,6 +63,36 @@ export interface TeamSection {
 }
 
 // ---------------------------------------------------------------------------
+// Algolia consultant data (used by /api/consultants)
+// ---------------------------------------------------------------------------
+
+export interface AlgoliaConsultant {
+  objectID: string
+  title: string
+  name: string
+  surname: string
+  function: string
+  email: string
+  image: string
+  quote: string
+  linkedIn: string
+  sectors: string[]
+  functionalAreas: string[]
+  teams: number[]
+  plateId: number
+}
+
+export interface ConsultantSummary {
+  id: string
+  name: string
+  role: string
+  photoUrl: string
+  bio: string
+  sectors: string[]
+  functionalAreas: string[]
+}
+
+// ---------------------------------------------------------------------------
 // Search Profile
 // ---------------------------------------------------------------------------
 
@@ -71,9 +102,15 @@ export interface Criterion {
   weight: Weight
 }
 
+export interface PersonalityProfile {
+  intro: string
+  traits: string[]
+}
+
 export interface SearchProfileSection {
   mustHaves: Criterion[]
   niceToHaves: Criterion[]
+  personalityProfile: PersonalityProfile
 }
 
 // ---------------------------------------------------------------------------
@@ -323,6 +360,10 @@ export function createEmptyDeck(
     },
     searchProfile: {
       mustHaves: [],
+      personalityProfile: {
+        intro: '',
+        traits: [],
+      },
       niceToHaves: [],
     },
     salary: {
