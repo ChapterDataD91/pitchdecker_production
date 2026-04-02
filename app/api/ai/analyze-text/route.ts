@@ -6,7 +6,7 @@ import { getAnalysisSystemPrompt } from '@/lib/ai/prompts'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { text, context } = body as { text: string; context: AISectionContext }
+    const { text, context, instruction } = body as { text: string; context: AISectionContext; instruction?: string }
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return NextResponse.json(
@@ -23,7 +23,10 @@ export async function POST(request: NextRequest) {
     }
 
     const systemPrompt = getAnalysisSystemPrompt(context)
-    const result = await analyzeWithClaude(systemPrompt, text)
+    const userContent = instruction
+      ? `${text}\n\n---\nAdditional instruction from the consultant: ${instruction}`
+      : text
+    const result = await analyzeWithClaude(systemPrompt, userContent)
 
     return NextResponse.json(result)
   } catch (error) {

@@ -6,7 +6,7 @@ import { getAnalysisSystemPrompt, getWebSearchPrompt } from '@/lib/ai/prompts'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { query, context } = body as { query: string; context: AISectionContext }
+    const { query, context, instruction } = body as { query: string; context: AISectionContext; instruction?: string }
 
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
       return NextResponse.json(
@@ -23,7 +23,9 @@ export async function POST(request: NextRequest) {
     }
 
     const systemPrompt = getAnalysisSystemPrompt(context)
-    const webSearchQuery = getWebSearchPrompt(context)
+    const webSearchQuery = instruction
+      ? `${getWebSearchPrompt(context)}\n\nAdditional instruction from the consultant: ${instruction}`
+      : getWebSearchPrompt(context)
     const result = await analyzeWithWebSearch(systemPrompt, webSearchQuery)
 
     return NextResponse.json(result)

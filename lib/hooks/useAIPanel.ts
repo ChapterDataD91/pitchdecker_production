@@ -25,10 +25,10 @@ interface UseAIPanelReturn {
 
   // Actions
   setActiveMode: (mode: AIInputMode) => void
-  analyzeText: (text: string) => Promise<void>
-  analyzeDocument: (file: File) => Promise<void>
+  analyzeText: (text: string, instruction?: string) => Promise<void>
+  analyzeDocument: (file: File, instruction?: string) => Promise<void>
   transcribeAudio: (audioBlob: Blob) => Promise<void>
-  webSearch: (query: string) => Promise<void>
+  webSearch: (query: string, instruction?: string) => Promise<void>
   analyzeTranscript: () => Promise<void>
   setTranscript: (text: string) => void
   acceptSuggestion: (id: string) => void
@@ -66,14 +66,14 @@ export function useAIPanel(context: AISectionContext): UseAIPanelReturn {
   const clearError = useCallback(() => setError(null), [])
 
   const analyzeText = useCallback(
-    async (text: string) => {
+    async (text: string, instruction?: string) => {
       setIsAnalyzingText(true)
       setError(null)
       try {
         const res = await fetch('/api/ai/analyze-text', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, context }),
+          body: JSON.stringify({ text, context, instruction }),
         })
         if (!res.ok) {
           throw new Error(`Analysis failed: ${res.statusText}`)
@@ -92,13 +92,14 @@ export function useAIPanel(context: AISectionContext): UseAIPanelReturn {
   )
 
   const analyzeDocument = useCallback(
-    async (file: File) => {
+    async (file: File, instruction?: string) => {
       setIsAnalyzingDocument(true)
       setError(null)
       try {
         const formData = new FormData()
         formData.append('file', file)
         formData.append('context', JSON.stringify(context))
+        if (instruction) formData.append('instruction', instruction)
 
         const res = await fetch('/api/ai/analyze-document', {
           method: 'POST',
@@ -146,14 +147,14 @@ export function useAIPanel(context: AISectionContext): UseAIPanelReturn {
   }, [])
 
   const webSearch = useCallback(
-    async (query: string) => {
+    async (query: string, instruction?: string) => {
       setIsSearchingWeb(true)
       setError(null)
       try {
         const res = await fetch('/api/ai/web-search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query, context }),
+          body: JSON.stringify({ query, context, instruction }),
         })
         if (!res.ok) {
           throw new Error(`Web search failed: ${res.statusText}`)

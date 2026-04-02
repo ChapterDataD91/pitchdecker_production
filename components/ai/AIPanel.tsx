@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { AIInputMode, AISectionContext, AISuggestion } from '@/lib/ai-types'
 
@@ -25,12 +25,12 @@ interface AIPanelProps {
   transcript: string | null
   error: string | null
   onModeChange: (mode: AIInputMode) => void
-  onAnalyzeText: (text: string) => void
-  onAnalyzeDocument: (file: File) => void
+  onAnalyzeText: (text: string, instruction?: string) => void
+  onAnalyzeDocument: (file: File, instruction?: string) => void
   onTranscribeAudio: (blob: Blob) => void
   onAnalyzeTranscript: () => void
   onTranscriptChange: (text: string) => void
-  onWebSearch: (query: string) => void
+  onWebSearch: (query: string, instruction?: string) => void
   onAccept: (id: string) => void
   onDismiss: (id: string) => void
   onAcceptAll: () => void
@@ -63,9 +63,12 @@ export default function AIPanel({
   onDismissAll,
 }: AIPanelProps) {
   const [errorDismissed, setErrorDismissed] = useState(false)
+  const [instruction, setInstruction] = useState('')
 
   // Reset error dismissed state when error changes
   const showError = error && !errorDismissed
+
+  const handleInstructionChange = useCallback((value: string) => setInstruction(value), [])
 
   const defaultQuery =
     context.clientName && context.roleTitle
@@ -141,6 +144,8 @@ export default function AIPanel({
               <DocumentUpload
                 onAnalyze={onAnalyzeDocument}
                 isAnalyzing={isAnalyzingDocument}
+                instruction={instruction}
+                onInstructionChange={handleInstructionChange}
               />
             )}
             {activeMode === 'voice' && (
@@ -157,6 +162,8 @@ export default function AIPanel({
               <TextInput
                 onAnalyze={onAnalyzeText}
                 isAnalyzing={isAnalyzingText}
+                instruction={instruction}
+                onInstructionChange={handleInstructionChange}
               />
             )}
             {activeMode === 'web-search' && (
@@ -164,6 +171,8 @@ export default function AIPanel({
                 onSearch={onWebSearch}
                 isSearching={isSearchingWeb}
                 defaultQuery={defaultQuery}
+                instruction={instruction}
+                onInstructionChange={handleInstructionChange}
               />
             )}
           </div>

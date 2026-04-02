@@ -180,6 +180,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const instructionStr = formData.get('instruction')
+    const instruction = typeof instructionStr === 'string' && instructionStr.trim() ? instructionStr.trim() : undefined
+
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
     const systemPrompt = getAnalysisSystemPrompt(context)
@@ -197,7 +200,10 @@ export async function POST(request: NextRequest) {
           { status: 422 },
         )
       }
-      result = await analyzeWithClaude(systemPrompt, extractedText)
+      const userContent = instruction
+        ? `${extractedText}\n\n---\nAdditional instruction from the consultant: ${instruction}`
+        : extractedText
+      result = await analyzeWithClaude(systemPrompt, userContent)
     }
 
     return NextResponse.json(result)
