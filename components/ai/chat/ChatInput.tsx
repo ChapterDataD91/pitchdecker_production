@@ -6,18 +6,28 @@ interface ChatInputProps {
   onSend: (content: string) => void
   isStreaming: boolean
   onCancel: () => void
+  onFileUpload: (file: File) => Promise<void>
+  isUploading: boolean
 }
 
-export default function ChatInput({ onSend, isStreaming, onCancel }: ChatInputProps) {
+const ACCEPTED_FILE_TYPES = '.pdf,.docx,.txt,.png,.jpg,.jpeg,.webp'
+
+export default function ChatInput({
+  onSend,
+  isStreaming,
+  onCancel,
+  onFileUpload,
+  isUploading,
+}: ChatInputProps) {
   const [value, setValue] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleSend = useCallback(() => {
     const trimmed = value.trim()
     if (!trimmed || isStreaming) return
     onSend(trimmed)
     setValue('')
-    // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
@@ -33,7 +43,6 @@ export default function ChatInput({ onSend, isStreaming, onCancel }: ChatInputPr
     [handleSend],
   )
 
-  // Auto-grow textarea
   const handleInput = useCallback(() => {
     const el = textareaRef.current
     if (!el) return
@@ -41,9 +50,56 @@ export default function ChatInput({ onSend, isStreaming, onCancel }: ChatInputPr
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`
   }, [])
 
+  const handleFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+      await onFileUpload(file)
+      // Reset input so the same file can be uploaded again
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    },
+    [onFileUpload],
+  )
+
   return (
     <div className="shrink-0 border-t border-border px-3 py-3">
       <div className="flex items-end gap-2">
+        {/* File attachment button */}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isUploading || isStreaming}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-bg-hover hover:text-text-secondary disabled:opacity-40 active:scale-[0.96]"
+          aria-label="Attach a file"
+        >
+          {isUploading ? (
+            <svg width="16" height="16" viewBox="0 0 16 16" className="animate-spin">
+              <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="8" strokeLinecap="round" />
+            </svg>
+          ) : (
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M13.5 7.5l-5.318 5.318a2.625 2.625 0 0 1-3.712-3.712L9.788 3.788a1.75 1.75 0 0 1 2.474 2.474L6.944 11.58a.875.875 0 0 1-1.237-1.237L10.5 5.5" />
+            </svg>
+          )}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={ACCEPTED_FILE_TYPES}
+          onChange={handleFileChange}
+          className="hidden"
+        />
+
         <textarea
           ref={textareaRef}
           value={value}

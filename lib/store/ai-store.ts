@@ -13,6 +13,7 @@ import type {
   ChatEntry,
   ChatMessage,
   ProposedChange,
+  DeckDocument,
 } from '@/lib/ai-types'
 import type { SectionId } from '@/lib/theme'
 import { SECTIONS } from '@/lib/theme'
@@ -23,10 +24,33 @@ import type { DeckSections } from '@/lib/types'
 // Types
 // ---------------------------------------------------------------------------
 
+const PANEL_WIDTH_KEY = 'pitchdecker:ai-panel-width'
+const DEFAULT_PANEL_WIDTH = 384
+
+function loadPanelWidth(): number {
+  try {
+    const raw = localStorage.getItem(PANEL_WIDTH_KEY)
+    if (!raw) return DEFAULT_PANEL_WIDTH
+    const n = parseInt(raw, 10)
+    return Number.isFinite(n) && n >= 320 ? n : DEFAULT_PANEL_WIDTH
+  } catch {
+    return DEFAULT_PANEL_WIDTH
+  }
+}
+
+function savePanelWidth(width: number): void {
+  try {
+    localStorage.setItem(PANEL_WIDTH_KEY, String(width))
+  } catch {
+    // silently fail
+  }
+}
+
 interface AIState {
   // Panel
   panelOpen: boolean
   panelMode: AIPanelMode
+  panelWidth: number
 
   // Tools mode
   toolsSuggestions: AISuggestion[]
@@ -44,6 +68,11 @@ interface AIState {
   chatIsStreaming: boolean
   chatError: string | null
   chatDeckId: string | null
+
+  // Documents
+  deckDocuments: DeckDocument[]
+  isLoadingDocuments: boolean
+  isUploadingDocument: boolean
 }
 
 interface AIActions {
@@ -52,6 +81,8 @@ interface AIActions {
   openPanel: () => void
   closePanel: () => void
   setPanelMode: (mode: AIPanelMode) => void
+  setPanelWidth: (width: number) => void
+  resetPanelWidth: () => void
 
   // Tools
   setToolsActiveMode: (mode: AIInputMode) => void
@@ -82,6 +113,12 @@ interface AIActions {
   setChatStreaming: (streaming: boolean) => void
   clearChat: () => void
   persistChat: () => void
+
+  // Documents
+  loadDocuments: (deckId: string) => Promise<void>
+  uploadDocument: (deckId: string, file: File) => Promise<DeckDocument | null>
+  removeDocument: (deckId: string, docId: string) => Promise<void>
+  addDocumentToStore: (doc: DeckDocument) => void
 }
 
 type AIStore = AIState & AIActions
@@ -122,6 +159,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
   // -- Panel state --
   panelOpen: false,
   panelMode: 'tools',
+  panelWidth: typeof window !== 'undefined' ? loadPanelWidth() : DEFAULT_PANEL_WIDTH,
 
   // -- Tools state --
   toolsSuggestions: [],
@@ -140,11 +178,25 @@ export const useAIStore = create<AIStore>((set, get) => ({
   chatError: null,
   chatDeckId: null,
 
+  // -- Documents state --
+  deckDocuments: [],
+  isLoadingDocuments: false,
+  isUploadingDocument: false,
+
   // -- Panel actions --
   togglePanel: () => set((s) => ({ panelOpen: !s.panelOpen })),
   openPanel: () => set({ panelOpen: true }),
   closePanel: () => set({ panelOpen: false }),
   setPanelMode: (mode) => set({ panelMode: mode }),
+  setPanelWidth: (width) => {
+    const clamped = Math.max(320, Math.min(width, window.innerWidth * 0.7))
+    set({ panelWidth: clamped })
+    savePanelWidth(clamped)
+  },
+  resetPanelWidth: () => {
+    set({ panelWidth: DEFAULT_PANEL_WIDTH })
+    savePanelWidth(DEFAULT_PANEL_WIDTH)
+  },
 
   // -- Tools actions --
   setToolsActiveMode: (mode) => set({ toolsActiveMode: mode }),
@@ -247,10 +299,11 @@ export const useAIStore = create<AIStore>((set, get) => ({
 
   addSectionDivider: (sectionId) => {
     const { chatMessages } = get()
-    // Don't add divider if chat is empty or last entry is already this section's divider
+    // Don't add divider if chat is empty
     if (chatMessages.length === 0) return
     const last = chatMessages[chatMessages.length - 1]
-    if (last.type === 'section-divider' && last.sectionId === sectionId) return
+    // Don't add if last entry is already any divider (no messages between dividers)
+    if (last.type === 'section-divider') return
 
     const label = SECTIONS.find((s) => s.id === sectionId)?.label ?? sectionId
     set((s) => ({
@@ -276,11 +329,27 @@ export const useAIStore = create<AIStore>((set, get) => ({
     const change = entry.proposedChanges.find((c) => c.id === changeId)
     if (!change || change.status !== 'pending') return
 
+    // Sanitize patch data — coerce known fields to correct types
+    const patch = { ...change.patch } as Record<string, unknown>
+    if ('personalityProfile' in patch) {
+      const pp = patch.personalityProfile as Record<string, unknown>
+      if (pp && Array.isArray(pp.traits)) {
+        pp.traits = pp.traits.map((t: unknown) =>
+          typeof t === 'string' ? t : typeof t === 'object' && t !== null
+            ? (t as Record<string, unknown>).text ??
+              (t as Record<string, unknown>).trait ??
+              (t as Record<string, unknown>).description ??
+              JSON.stringify(t)
+            : String(t),
+        )
+      }
+    }
+
     // Apply the change to the editor store
     const editorStore = useEditorStore.getState()
     editorStore.updateSection(
       change.sectionKey,
-      change.patch as Partial<DeckSections[keyof DeckSections]>,
+      patch as Partial<DeckSections[keyof DeckSections]>,
     )
 
     // Update the change status
@@ -335,4 +404,65 @@ export const useAIStore = create<AIStore>((set, get) => ({
       saveChatToStorage(chatDeckId, chatMessages)
     }
   },
+
+  // -- Document actions --
+  loadDocuments: async (deckId) => {
+    set({ isLoadingDocuments: true })
+    try {
+      const res = await fetch(`/api/deck/${deckId}/documents`)
+      if (!res.ok) throw new Error('Failed to load documents')
+      const data = await res.json()
+      set({ deckDocuments: data.documents ?? [] })
+    } catch (err) {
+      console.error('Failed to load documents:', err)
+      set({ deckDocuments: [] })
+    } finally {
+      set({ isLoadingDocuments: false })
+    }
+  },
+
+  uploadDocument: async (deckId, file) => {
+    set({ isUploadingDocument: true })
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await fetch(`/api/deck/${deckId}/documents`, {
+        method: 'POST',
+        body: formData,
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error ?? 'Upload failed')
+      }
+      const doc: DeckDocument = await res.json()
+      set((s) => ({ deckDocuments: [doc, ...s.deckDocuments] }))
+      return doc
+    } catch (err) {
+      console.error('Failed to upload document:', err)
+      return null
+    } finally {
+      set({ isUploadingDocument: false })
+    }
+  },
+
+  removeDocument: async (deckId, docId) => {
+    // Optimistic removal
+    set((s) => ({
+      deckDocuments: s.deckDocuments.filter((d) => d.id !== docId),
+    }))
+    try {
+      const res = await fetch(`/api/deck/${deckId}/documents/${docId}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) throw new Error('Delete failed')
+    } catch (err) {
+      console.error('Failed to delete document:', err)
+      // Reload to restore state
+      get().loadDocuments(deckId)
+    }
+  },
+
+  addDocumentToStore: (doc) =>
+    set((s) => ({ deckDocuments: [doc, ...s.deckDocuments] })),
 }))

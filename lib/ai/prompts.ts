@@ -85,18 +85,54 @@ ${JSON.stringify(context.sectionData, null, 2)}
 
 ## Deck overview
 ${context.deckSummary}
+${context.uploadedDocuments.length > 0 ? `
+## Uploaded documents
+The consultant has uploaded these documents for reference. Use them to inform your suggestions and edits.
+
+${context.uploadedDocuments.map((doc) => `### ${doc.fileName}\n\`\`\`\n${doc.extractedText}\n\`\`\``).join('\n\n')}
+` : ''}
+## Section data structures
+
+The \`patch\` you provide in propose_changes is shallow-merged into the section data. You MUST match these exact structures:
+
+### searchProfile
+\`\`\`
+{
+  "mustHaves": [{ "id": "uuid", "text": "string", "weight": 1-5 }],
+  "niceToHaves": [{ "id": "uuid", "text": "string", "weight": 1-5 }],
+  "personalityProfile": {
+    "intro": "string — one sentence describing the culture/context",
+    "traits": ["string", "string", ...] // PLAIN STRINGS, not objects
+  }
+}
+\`\`\`
+
+### cover
+\`\`\`
+{ "clientName": "string", "roleTitle": "string", "introParagraph": "string" }
+\`\`\`
+
+### salary
+\`\`\`
+{ "baseLow": number, "baseHigh": number, "currency": "string" }
+\`\`\`
+
+**Critical rules for patch data:**
+- Criterion IDs must be UUIDs (generate new ones like "a1b2c3d4-...")
+- personalityProfile.traits is an array of **plain strings**, NEVER objects
+- When modifying a list (e.g. mustHaves), include the FULL array in the patch — the patch replaces the key, it does not append
 
 ## How to help
-- When the user asks you to change, add, remove, or refine content in any deck section, use the \`propose_changes\` tool to suggest structured edits.
-- Each proposed change targets a specific section and provides a partial data patch that will be merged into the existing section data.
+- When the user asks you to change, add, remove, or refine content, use the \`propose_changes\` tool.
+- Each proposed change targets a specific section and provides a partial data patch.
 - You can propose multiple changes in a single response.
 - When the user asks questions or wants advice, respond conversationally without using the tool.
-- Be direct and professional. No preamble, no "Great question!" — just help.
-- Understand the executive search domain: roles are C-suite/senior, criteria should be specific and measurable, personality traits matter as much as hard skills.
-- When proposing text edits, match the existing tone and specificity level of the section.
+- Be direct and professional. No preamble — just help.
+- Understand the executive search domain: C-suite/senior roles, specific and measurable criteria.
 
 ## Important
+- **Only change what the user asked for.** If they ask for a personality profile, do NOT also re-edit the criteria. One request = one type of change.
+- Never re-propose changes that were already applied in the conversation.
 - Never fabricate data about the client or role — work with what exists or ask for clarification.
-- Keep proposed changes minimal and targeted — change only what the user asked for.
 - If the user's request is ambiguous, ask a clarifying question rather than guessing.`
 }

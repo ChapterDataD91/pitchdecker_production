@@ -2,52 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import type { AISectionContext, AIAnalysisResponse } from '@/lib/ai-types'
 import { analyzeWithClaude, getClaudeClient } from '@/lib/ai/claude-client'
 import { getAnalysisSystemPrompt } from '@/lib/ai/prompts'
-import { PDFParse } from 'pdf-parse'
-import mammoth from 'mammoth'
-
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
-
-const SUPPORTED_TEXT_EXTENSIONS = new Set(['pdf', 'docx', 'txt'])
-const SUPPORTED_IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp'])
-
-type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/webp'
-
-function getFileExtension(filename: string): string {
-  return filename.split('.').pop()?.toLowerCase() ?? ''
-}
-
-function getImageMediaType(ext: string): ImageMediaType {
-  const map: Record<string, ImageMediaType> = {
-    png: 'image/png',
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    webp: 'image/webp',
-  }
-  return map[ext]
-}
-
-async function extractTextFromFile(
-  buffer: Buffer,
-  extension: string,
-): Promise<string> {
-  switch (extension) {
-    case 'pdf': {
-      const parser = new PDFParse({ data: new Uint8Array(buffer) })
-      const textResult = await parser.getText()
-      await parser.destroy()
-      return textResult.text
-    }
-    case 'docx': {
-      const result = await mammoth.extractRawText({ buffer })
-      return result.value
-    }
-    case 'txt': {
-      return buffer.toString('utf-8')
-    }
-    default:
-      throw new Error(`Unsupported text file type: .${extension}`)
-  }
-}
+import {
+  MAX_FILE_SIZE,
+  getFileExtension,
+  getImageMediaType,
+  isTextFile,
+  isImageFile,
+  extractTextFromFile,
+  type ImageMediaType,
+} from '@/lib/ai/extract-text'
 
 async function analyzeImageWithClaude(
   buffer: Buffer,
@@ -170,10 +133,10 @@ export async function POST(request: NextRequest) {
     }
 
     const extension = getFileExtension(file.name)
-    const isTextFile = SUPPORTED_TEXT_EXTENSIONS.has(extension)
-    const isImage = SUPPORTED_IMAGE_EXTENSIONS.has(extension)
+    const isText = isTextFile(extension)
+    const isImage = isImageFile(extension)
 
-    if (!isTextFile && !isImage) {
+    if (!isText && !isImage) {
       return NextResponse.json(
         { error: `Unsupported file type: .${extension}. Supported: PDF, DOCX, TXT, PNG, JPG, WEBP` },
         { status: 415 },

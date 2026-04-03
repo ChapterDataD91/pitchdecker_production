@@ -48,6 +48,20 @@ export interface AIAnalysisResponse {
 export type AIPanelMode = 'tools' | 'chat'
 
 // ---------------------------------------------------------------------------
+// Documents
+// ---------------------------------------------------------------------------
+
+export interface DeckDocument {
+  id: string          // MongoDB _id as string
+  deckId: string
+  fileName: string
+  fileType: string    // 'pdf' | 'docx' | 'txt' | 'image'
+  fileSize: number
+  extractedText: string
+  uploadedAt: string
+}
+
+// ---------------------------------------------------------------------------
 // Chat types
 // ---------------------------------------------------------------------------
 
@@ -91,6 +105,7 @@ export interface ChatContext {
   clientName: string
   roleTitle: string
   deckSummary: string
+  uploadedDocuments: Array<{ fileName: string; extractedText: string }>
 }
 
 export interface ChatStreamEvent {

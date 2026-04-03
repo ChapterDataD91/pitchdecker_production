@@ -5,7 +5,7 @@
 
 import type { Deck, DeckSections } from '@/lib/types'
 import type { SectionId } from '@/lib/theme'
-import type { ChatContext } from '@/lib/ai-types'
+import type { ChatContext, DeckDocument } from '@/lib/ai-types'
 import { SECTIONS } from '@/lib/theme'
 
 function summarizeSection(sectionId: SectionId, data: DeckSections[keyof DeckSections]): string {
@@ -63,6 +63,7 @@ function summarizeSection(sectionId: SectionId, data: DeckSections[keyof DeckSec
 export function buildChatContext(
   deck: Deck,
   activeSection: SectionId,
+  documents: DeckDocument[],
 ): ChatContext {
   const deckSummary = SECTIONS.map((s) => {
     const data = deck.sections[s.id as keyof DeckSections]
@@ -71,11 +72,17 @@ export function buildChatContext(
     return `- ${s.label}${active}: ${summary}`
   }).join('\n')
 
+  const uploadedDocuments = documents.map((doc) => ({
+    fileName: doc.fileName,
+    extractedText: doc.extractedText,
+  }))
+
   return {
     sectionType: activeSection,
     sectionData: deck.sections[activeSection as keyof DeckSections],
     clientName: deck.clientName ?? deck.sections.cover.clientName ?? '',
     roleTitle: deck.roleTitle ?? deck.sections.cover.roleTitle ?? '',
     deckSummary,
+    uploadedDocuments,
   }
 }

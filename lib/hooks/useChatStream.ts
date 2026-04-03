@@ -36,8 +36,9 @@ export function useChatStream(): UseChatStreamReturn {
         content: msg.content,
       }))
 
-    // Build context
-    const context = buildChatContext(deck, activeSection as SectionId)
+    // Build context (includes uploaded documents from store)
+    const { deckDocuments } = useAIStore.getState()
+    const context = buildChatContext(deck, activeSection as SectionId, deckDocuments)
 
     // Start streaming
     const assistantId = aiStore.startAssistantMessage(activeSection as SectionId)

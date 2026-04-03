@@ -9,12 +9,14 @@ interface ChatMessageListProps {
   messages: ChatEntry[]
   onAcceptChange: (messageId: string, changeId: string) => void
   onDismissChange: (messageId: string, changeId: string) => void
+  onRetry: (messageId: string) => void
 }
 
 export default function ChatMessageList({
   messages,
   onAcceptChange,
   onDismissChange,
+  onRetry,
 }: ChatMessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -57,6 +59,7 @@ export default function ChatMessageList({
             message={entry}
             onAcceptChange={(changeId) => onAcceptChange(entry.id, changeId)}
             onDismissChange={(changeId) => onDismissChange(entry.id, changeId)}
+            onRetry={() => onRetry(entry.id)}
           />
         )
       })}

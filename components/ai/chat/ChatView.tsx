@@ -1,6 +1,8 @@
 'use client'
 
+import { useCallback } from 'react'
 import { useAIStore } from '@/lib/store/ai-store'
+import { useEditorStore } from '@/lib/store/editor-store'
 import { useChatStream } from '@/lib/hooks/useChatStream'
 import ChatMessageList from './ChatMessageList'
 import ChatInput from './ChatInput'
@@ -19,7 +21,61 @@ export default function ChatView() {
   const dismissProposedChange = useAIStore((s) => s.dismissProposedChange)
   const setChatError = useAIStore((s) => s.setChatError)
 
+  const isUploadingDocument = useAIStore((s) => s.isUploadingDocument)
+  const uploadDocument = useAIStore((s) => s.uploadDocument)
+
   const { sendMessage, cancelStream } = useChatStream()
+
+  const handleFileUpload = useCallback(
+    async (file: File) => {
+      const deckId = useEditorStore.getState().deck?.id
+      if (!deckId) return
+      const doc = await uploadDocument(deckId, file)
+      if (doc) {
+        // Send a message so Claude knows the document was added
+        sendMessage(`I've uploaded a document: "${doc.fileName}". Please use it as context.`)
+      }
+    },
+    [uploadDocument, sendMessage],
+  )
+
+  // Retry: find the user message before this assistant message, remove both,
+  // and re-send the same query (sendMessage adds a fresh user message).
+  const handleRetry = useCallback(
+    (assistantMessageId: string) => {
+      const messages = useAIStore.getState().chatMessages
+      const idx = messages.findIndex(
+        (e) => e.type === 'message' && e.id === assistantMessageId,
+      )
+      if (idx < 0) return
+
+      // Walk backwards to find the preceding user message
+      let userMessageId: string | null = null
+      let userContent: string | null = null
+      for (let i = idx - 1; i >= 0; i--) {
+        const entry = messages[i]
+        if (entry.type === 'message' && entry.role === 'user') {
+          userMessageId = entry.id
+          userContent = entry.content
+          break
+        }
+      }
+      if (!userContent || !userMessageId) return
+
+      // Remove both the assistant response and the original user message
+      useAIStore.setState({
+        chatMessages: messages.filter(
+          (e) =>
+            !(e.type === 'message' && e.id === assistantMessageId) &&
+            !(e.type === 'message' && e.id === userMessageId),
+        ),
+      })
+
+      // Re-send — this adds a new user message + triggers a new response
+      sendMessage(userContent)
+    },
+    [sendMessage],
+  )
 
   const isEmpty = chatMessages.length === 0
 
@@ -67,6 +123,7 @@ export default function ChatView() {
           messages={chatMessages}
           onAcceptChange={acceptProposedChange}
           onDismissChange={dismissProposedChange}
+          onRetry={handleRetry}
         />
       )}
 
@@ -92,6 +149,8 @@ export default function ChatView() {
         onSend={sendMessage}
         isStreaming={chatIsStreaming}
         onCancel={cancelStream}
+        onFileUpload={handleFileUpload}
+        isUploading={isUploadingDocument}
       />
     </div>
   )

@@ -70,6 +70,7 @@ export default function DeckEditorPage({
   const initChat = useAIStore((s) => s.initChat)
   const addSectionDivider = useAIStore((s) => s.addSectionDivider)
   const persistChat = useAIStore((s) => s.persistChat)
+  const loadDocuments = useAIStore((s) => s.loadDocuments)
 
   // Fetch deck on mount
   useEffect(() => {
@@ -90,12 +91,13 @@ export default function DeckEditorPage({
     loadDeck()
   }, [id, setDeck, setLoading, setError])
 
-  // Initialize chat when deck loads
+  // Initialize chat and load documents when deck loads
   useEffect(() => {
     if (deck) {
       initChat(id)
+      loadDocuments(id)
     }
-  }, [deck, id, initChat])
+  }, [deck, id, initChat, loadDocuments])
 
   // Add section divider to chat when switching sections
   useEffect(() => {
@@ -108,6 +110,18 @@ export default function DeckEditorPage({
       persistChat()
     }
   }, [persistChat])
+
+  // Auto-apply AI personality profile to searchProfile section
+  const toolsPersonalityProfile = useAIStore((s) => s.toolsPersonalityProfile)
+  useEffect(() => {
+    if (!deck || activeSection !== 'searchProfile' || !toolsPersonalityProfile) return
+    const current = deck.sections.searchProfile.personalityProfile
+    // Only auto-fill if the current profile is empty
+    if (current.intro || current.traits.length > 0) return
+    updateSection('searchProfile', {
+      personalityProfile: toolsPersonalityProfile,
+    })
+  }, [toolsPersonalityProfile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keyboard shortcut: Cmd+Shift+A to toggle AI panel
   useEffect(() => {

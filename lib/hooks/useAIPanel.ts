@@ -3,6 +3,7 @@
 import { useCallback } from 'react'
 import { v4 } from 'uuid'
 import { useAIStore } from '@/lib/store/ai-store'
+import { useEditorStore } from '@/lib/store/editor-store'
 import type {
   AISuggestion,
   AIInputMode,
@@ -103,6 +104,14 @@ export function useAIPanel(context: AISectionContext): UseAIPanelReturn {
         const newSuggestions = mapResponseToSuggestions(data)
         store.addToolsSuggestions(newSuggestions)
         if (data.personalityProfile) store.setToolsPersonalityProfile(data.personalityProfile)
+
+        // Also persist the document to MongoDB for chat context
+        const deckId = useEditorStore.getState().deck?.id
+        if (deckId) {
+          store.uploadDocument(deckId, file).catch(() => {
+            // Non-blocking — analysis succeeded even if persistence fails
+          })
+        }
       } catch (err) {
         store.setToolsError(
           err instanceof Error ? err.message : 'Document analysis failed',

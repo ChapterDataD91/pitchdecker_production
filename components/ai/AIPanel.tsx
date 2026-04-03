@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAIStore } from '@/lib/store/ai-store'
 import { useAIPanel } from '@/lib/hooks/useAIPanel'
@@ -155,6 +155,74 @@ function ToolsView({ context, onAccept, onAcceptAll }: ToolsViewProps) {
 }
 
 // ---------------------------------------------------------------------------
+// ResizeHandle — draggable left-edge handle for panel resizing
+// ---------------------------------------------------------------------------
+
+function ResizeHandle() {
+  const setPanelWidth = useAIStore((s) => s.setPanelWidth)
+  const resetPanelWidth = useAIStore((s) => s.resetPanelWidth)
+  const [isDragging, setIsDragging] = useState(false)
+  const startXRef = useRef(0)
+  const startWidthRef = useRef(0)
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault()
+      setIsDragging(true)
+      startXRef.current = e.clientX
+      startWidthRef.current = useAIStore.getState().panelWidth
+    },
+    [],
+  )
+
+  const handleDoubleClick = useCallback(() => {
+    resetPanelWidth()
+  }, [resetPanelWidth])
+
+  useEffect(() => {
+    if (!isDragging) return
+
+    function onMouseMove(e: MouseEvent) {
+      const delta = startXRef.current - e.clientX
+      setPanelWidth(startWidthRef.current + delta)
+    }
+
+    function onMouseUp() {
+      setIsDragging(false)
+    }
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+
+    return () => {
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [isDragging, setPanelWidth])
+
+  return (
+    <div
+      onMouseDown={handleMouseDown}
+      onDoubleClick={handleDoubleClick}
+      className="group absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize"
+      title="Drag to resize — double-click to reset"
+    >
+      <div
+        className={`absolute inset-y-0 left-0 w-0.5 transition-colors duration-150 ${
+          isDragging
+            ? 'bg-accent'
+            : 'bg-transparent group-hover:bg-accent/40'
+        }`}
+      />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // AIPanel — main component
 // ---------------------------------------------------------------------------
 
@@ -167,6 +235,7 @@ interface AIPanelProps {
 export default function AIPanel({ context, onToolsAccept, onToolsAcceptAll }: AIPanelProps) {
   const panelOpen = useAIStore((s) => s.panelOpen)
   const panelMode = useAIStore((s) => s.panelMode)
+  const panelWidth = useAIStore((s) => s.panelWidth)
   const closePanel = useAIStore((s) => s.closePanel)
   const setPanelMode = useAIStore((s) => s.setPanelMode)
 
@@ -178,8 +247,12 @@ export default function AIPanel({ context, onToolsAccept, onToolsAcceptAll }: AI
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
           transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-          className="fixed bottom-0 right-0 top-0 z-50 flex w-96 flex-col border-l border-border bg-bg shadow-lg"
+          style={{ width: panelWidth }}
+          className="fixed bottom-0 right-0 top-0 z-50 flex flex-col border-l border-border bg-bg shadow-lg"
         >
+          {/* Resize handle */}
+          <ResizeHandle />
+
           {/* Header */}
           <div className="flex shrink-0 items-center justify-between px-4 py-3 border-b border-border">
             <h2 className="text-sm font-semibold text-text">AI Assist</h2>
