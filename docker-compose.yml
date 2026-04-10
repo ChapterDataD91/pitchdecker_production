@@ -6,7 +6,7 @@
 
 services:
   app:
-    image: pitchdecker-app:v1
+    image: pitchdecker-app:v2
     platform: linux/amd64
     build:
       context: .

@@ -20,7 +20,7 @@ ACR_NAME="ixion"
 ACR_LOGIN_SERVER="${ACR_NAME}.azurecr.io"
 RESOURCE_GROUP="Tidus"
 SUBSCRIPTION_ID="7b32fa30-1ded-4806-b495-7eebfcb48cbc"
-APP_NAME="pitchdecker-app"
+APP_NAME="topofminds-pitchdecker"
 COMPOSE_FILE="docker-compose.yml"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -92,34 +92,37 @@ log "Pushing to ACR..."
 docker push "$ACR_IMAGE"
 ok "Image pushed"
 
-# ── Update Container App ─────────────────────────────────────────────────────
+# ── Update Web App (App Service on Matrix plan) ─────────────────────────────
 
-log "Updating Container App '${APP_NAME}'..."
-REVISION_SUFFIX="$(date +%Y%m%d%H%M%S)"
-az containerapp update \
+log "Updating Web App '${APP_NAME}'..."
+az webapp config container set \
     --name "$APP_NAME" \
     --resource-group "$RESOURCE_GROUP" \
-    --image "$ACR_IMAGE" \
-    --revision-suffix "$REVISION_SUFFIX" \
+    --container-image-name "$ACR_IMAGE" \
+    --container-registry-url "https://${ACR_LOGIN_SERVER}" \
     --output none
-ok "Container App updated (revision: ${REVISION_SUFFIX})"
+ok "Web App container image updated"
+
+log "Restarting Web App..."
+az webapp restart \
+    --name "$APP_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --output none
+ok "Web App restarted"
 
 # ── Verify ───────────────────────────────────────────────────────────────────
 
-APP_FQDN=$(az containerapp show \
-    --name "$APP_NAME" \
-    --resource-group "$RESOURCE_GROUP" \
-    --query "properties.configuration.ingress.fqdn" -o tsv)
+APP_FQDN="${APP_NAME}.azurewebsites.net"
 
 log "Waiting for deployment..."
-sleep 10
+sleep 15
 
 HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${APP_FQDN}" || true)
 if [[ "$HEALTH_STATUS" == "200" ]]; then
     ok "Health check passed"
 else
     err "Health check returned ${HEALTH_STATUS} — check container logs"
-    log "View logs: az containerapp logs show --name ${APP_NAME} --resource-group ${RESOURCE_GROUP} --follow"
+    log "View logs: az webapp log tail --name ${APP_NAME} --resource-group ${RESOURCE_GROUP}"
 fi
 
 echo ""
