@@ -379,7 +379,7 @@ function AxisCard({ axis, index, deckContext, onUpdate, onRemove }: AxisCardProp
         <button
           type="button"
           onClick={onRemove}
-          className="flex-shrink-0 p-1.5 rounded-md text-text-tertiary hover:text-red-600 hover:bg-red-50 transition-colors"
+          className="shrink-0 p-1.5 rounded-md text-text-tertiary hover:text-red-600 hover:bg-red-50 transition-colors"
           title="Remove axis"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

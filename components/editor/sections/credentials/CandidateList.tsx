@@ -58,7 +58,7 @@ export default function CandidateList({
           <button
             type="button"
             onClick={() => onAccept(candidate)}
-            className="flex-shrink-0 flex items-center justify-center h-7 w-7 rounded-md border border-border text-text-tertiary hover:text-accent hover:border-accent hover:bg-accent-light transition-colors opacity-0 group-hover:opacity-100"
+            className="shrink-0 flex items-center justify-center h-7 w-7 rounded-md border border-border text-text-tertiary hover:text-accent hover:border-accent hover:bg-accent-light transition-colors opacity-0 group-hover:opacity-100"
             title="Add to axis"
           >
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -79,7 +79,7 @@ export default function CandidateList({
             <span className="text-sm text-text truncate">{candidate.company}</span>
             <span className="text-sm text-text-secondary truncate">{candidate.context}</span>
           </div>
-          <div className="flex-shrink-0 flex items-center justify-center h-7 w-7 text-accent">
+          <div className="shrink-0 flex items-center justify-center h-7 w-7 text-accent">
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
             </svg>

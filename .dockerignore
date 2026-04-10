@@ -1,0 +1,44 @@
+# Dependencies (installed fresh in Docker)
+node_modules
+
+# Build output (built fresh in Docker)
+.next
+out
+
+# Environment files (injected via docker-compose or Azure)
+.env
+.env.local
+.env.*.local
+
+# IDE and OS
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Non-production
+ideation/
+initial_instruction/
+
+# Docker files (don't need to be inside the image)
+Dockerfile
+docker-compose.yml
+deploy.sh
+
+# Development scripts
+start-local.sh
+
+# Documentation
+*.md
+!README.md
+
+# Claude / AI tooling
+.claude/
+SECURITY_NOTES.md

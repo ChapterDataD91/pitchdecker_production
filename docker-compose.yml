@@ -1,0 +1,47 @@
+# PitchDecker — Docker Compose Configuration
+# Commands:
+#   docker-compose up -d --build    # Build and start
+#   docker-compose logs -f          # View logs
+#   docker-compose down             # Stop and remove
+
+services:
+  app:
+    image: pitchdecker-app:v1
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pitchdecker-app
+    env_file:
+      - .env
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      # These are loaded from .env via env_file:
+      # - MONGODB_CONNECTION_STRING
+      # - ALGOLIA_APP_ID
+      # - ALGOLIA_API_KEY
+      # - ALGOLIA_CDN_BASE
+      # - ANTHROPIC_API_KEY
+      # - ASSEMBLYAI_API_KEY
+      # - POSTGRES_SERVER
+      # - POSTGRES_USER
+      # - POSTGRES_PASSWORD
+      # - POSTGRES_PORT
+      # - POSTGRES_DATABASE_GOLD
+      # - CICERO_URL
+      # - SKIP_AUTH_TO_CICERO
+      # Azure service principal (production only):
+      # - CICERO_APP_ID
+      # - AZURE_TENANT_ID
+      # - AZURE_CLIENT_ID
+      # - AZURE_CLIENT_SECRET
+    ports:
+      - "3100:3000"
+    restart: unless-stopped
+    networks:
+      - pitchdecker-network
+
+networks:
+  pitchdecker-network:
+    driver: bridge
