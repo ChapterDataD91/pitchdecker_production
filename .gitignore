@@ -54,3 +54,6 @@ Thumbs.db
 # non-production
 /ideation/
 /initial_instruction/
+
+# private notes
+SECURITY_NOTES.md

@@ -134,9 +134,14 @@ export interface Placement {
   id: string
   role: string
   company: string
-  industry: string
-  year: number
-  description: string
+  context: string
+  // Optional metadata
+  industry?: string
+  year?: number
+  description?: string
+  // Enrichment / foreign keys
+  placementId?: string
+  companyUrl?: string
 }
 
 export interface CredentialAxis {
@@ -145,6 +150,7 @@ export interface CredentialAxis {
   description: string
   color: string
   intro: string
+  contextLabel: string
   placements: Placement[]
 }
 
