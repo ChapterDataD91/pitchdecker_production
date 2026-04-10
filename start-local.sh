@@ -9,8 +9,10 @@ NC='\033[0m' # No Color
 
 echo -e "${GREEN}=== Starting PitchDecker (Local Development) ===${NC}"
 
-# Define port
+# Define ports
 APP_PORT=3000
+MCP_PORT=3001
+CICERO_DIR="$HOME/cicero_mcp"
 
 echo -e "${BLUE}App will start on port: $APP_PORT${NC}"
 
@@ -79,15 +81,34 @@ free_port() {
     fi
 }
 
-# Check for existing processes on the port
+# Check for existing processes on ports
 echo -e "${BLUE}Checking for existing processes...${NC}"
 free_port $APP_PORT
-echo -e "${GREEN}Port $APP_PORT is free. Starting app...${NC}"
+free_port $MCP_PORT
+echo -e "${GREEN}Ports $APP_PORT and $MCP_PORT are free.${NC}"
 
 # Install dependencies if needed
 if [ ! -d "node_modules" ]; then
     echo -e "${BLUE}Installing dependencies...${NC}"
     npm install
+fi
+
+# Start Cicero MCP server (if available)
+MCP_PID=""
+if [ -d "$CICERO_DIR" ] && [ -f "$CICERO_DIR/build/index.js" ]; then
+    echo -e "${BLUE}Starting Cicero MCP server on port $MCP_PORT...${NC}"
+    SKIP_AUTH=true PORT=$MCP_PORT node "$CICERO_DIR/build/index.js" --http &
+    MCP_PID=$!
+    sleep 2
+    if kill -0 "$MCP_PID" 2>/dev/null; then
+        echo -e "${GREEN}Cicero MCP running on port $MCP_PORT${NC}"
+    else
+        echo -e "${YELLOW}Cicero MCP failed to start — credentials features will be unavailable${NC}"
+        MCP_PID=""
+    fi
+else
+    echo -e "${YELLOW}Cicero MCP not found at $CICERO_DIR — skipping${NC}"
+    echo -e "${YELLOW}  To enable: cd ~/cicero_mcp && npm run build${NC}"
 fi
 
 # Start Next.js dev server
@@ -115,6 +136,9 @@ done
 echo ""
 echo -e "${GREEN}  App running on: http://localhost:$APP_PORT${NC}"
 echo -e "${BLUE}  API routes:     http://localhost:$APP_PORT/api${NC}"
+if [ -n "$MCP_PID" ]; then
+echo -e "${BLUE}  Cicero MCP:     http://localhost:$MCP_PORT/mcp${NC}"
+fi
 echo ""
 echo -e "${YELLOW}Press Ctrl+C to stop${NC}"
 
@@ -122,6 +146,9 @@ echo -e "${YELLOW}Press Ctrl+C to stop${NC}"
 cleanup() {
     echo -e "\n${YELLOW}Shutting down...${NC}"
     graceful_kill "$APP_PID" "next dev"
+    if [ -n "$MCP_PID" ]; then
+        graceful_kill "$MCP_PID" "cicero mcp"
+    fi
 
     # Clean up any remaining Next.js processes
     REMAINING=$(pgrep -f "next dev" 2>/dev/null)
