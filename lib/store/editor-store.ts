@@ -73,9 +73,16 @@ function computeSectionStatus(deck: Deck, sectionId: SectionId): SectionStatus {
     case 'timeline':
       return s.timeline.phases.length > 0 ? 'complete' : 'empty'
     case 'assessment': {
-      if (s.assessment.methods.length === 0) return 'empty'
-      const hasEnabled = s.assessment.methods.some((m) => m.enabled)
-      return hasEnabled ? 'complete' : 'in-progress'
+      const a = s.assessment
+      const hasAny =
+        a.assessor.name.trim() !== '' ||
+        a.pillars.length > 0 ||
+        a.processDescription.trim() !== '' ||
+        a.purposes.length > 0 ||
+        a.costsNote.trim() !== ''
+      if (!hasAny) return 'empty'
+      const hasCore = a.assessor.name.trim() !== '' && a.pillars.length > 0 && a.processDescription.trim() !== ''
+      return hasCore ? 'complete' : 'in-progress'
     }
     case 'personas':
       return s.personas.archetypes.length > 0 ? 'complete' : 'empty'

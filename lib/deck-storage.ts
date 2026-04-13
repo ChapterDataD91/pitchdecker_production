@@ -42,7 +42,11 @@ function isSectionComplete(deck: Deck, sectionId: SectionId): boolean {
     case 'timeline':
       return s.timeline.phases.length > 0
     case 'assessment':
-      return s.assessment.methods.some(m => m.enabled)
+      return (
+        s.assessment.assessor.name.trim() !== '' &&
+        s.assessment.pillars.length > 0 &&
+        s.assessment.processDescription.trim() !== ''
+      )
     case 'personas':
       return s.personas.archetypes.length > 0
     case 'scorecard':

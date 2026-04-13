@@ -34,8 +34,12 @@ function summarizeSection(sectionId: SectionId, data: DeckSections[keyof DeckSec
       return `${phases?.length ?? 0} phases`
     }
     case 'assessment': {
-      const methods = section.methods as unknown[] | undefined
-      return `${methods?.length ?? 0} assessment methods`
+      const pillars = section.pillars as unknown[] | undefined
+      const assessor = section.assessor as { name?: string } | undefined
+      const name = assessor?.name?.trim()
+      return name
+        ? `assessor: ${name}, ${pillars?.length ?? 0} pillars`
+        : `${pillars?.length ?? 0} pillars, no assessor`
     }
     case 'personas': {
       const archetypes = section.archetypes as unknown[] | undefined

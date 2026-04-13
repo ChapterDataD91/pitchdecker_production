@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // POST /api/ai/credentials/find-placements
 // Agentic tool-use loop: Claude calls cicero MCP tools to find placements
-// for one credential axis. Returns a list of candidate placements.
+// for one credential axis. Returns a list of client placements.
 // ---------------------------------------------------------------------------
 
 import { NextResponse } from 'next/server'
@@ -23,7 +23,7 @@ interface FindPlacementsRequest {
   }
 }
 
-export interface CandidatePlacement {
+export interface ClientPlacement {
   placementId: string
   role: string
   company: string
@@ -33,7 +33,7 @@ export interface CandidatePlacement {
 }
 
 interface FindPlacementsResponse {
-  candidates: CandidatePlacement[]
+  clients: ClientPlacement[]
   toolCalls: number
   reasoning?: string
 }
@@ -49,7 +49,7 @@ const RETURN_PLACEMENTS_TOOL: Anthropic.Messages.Tool = {
   input_schema: {
     type: 'object' as const,
     properties: {
-      candidates: {
+      clients: {
         type: 'array' as const,
         items: {
           type: 'object' as const,
@@ -60,11 +60,11 @@ const RETURN_PLACEMENTS_TOOL: Anthropic.Messages.Tool = {
             },
             role: {
               type: 'string' as const,
-              description: 'Job title of the placed candidate',
+              description: 'Job title placed at the client',
             },
             company: {
               type: 'string' as const,
-              description: 'Company where the candidate was placed',
+              description: 'Client company where the placement was made',
             },
             context: {
               type: 'string' as const,
@@ -246,11 +246,11 @@ export async function POST(request: Request) {
         // Check for terminal tool
         if (toolUse.name === 'return_placements') {
           const result = toolUse.input as {
-            candidates: CandidatePlacement[]
+            clients: ClientPlacement[]
             reasoning?: string
           }
           const response: FindPlacementsResponse = {
-            candidates: result.candidates || [],
+            clients: result.clients || [],
             toolCalls: totalToolCalls,
             reasoning: result.reasoning,
           }
@@ -286,7 +286,7 @@ export async function POST(request: Request) {
 
     // If we exit the loop without return_placements, return empty
     const response: FindPlacementsResponse = {
-      candidates: [],
+      clients: [],
       toolCalls: totalToolCalls,
       reasoning:
         'Search completed without explicit placement return. This may indicate the agent did not find suitable matches.',

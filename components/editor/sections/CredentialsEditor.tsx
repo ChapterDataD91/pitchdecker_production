@@ -5,8 +5,8 @@ import { v4 as uuid } from 'uuid'
 import type { CredentialsSection, CredentialAxis, Placement } from '@/lib/types'
 import { useEditorStore } from '@/lib/store/editor-store'
 import LoadingDots from '@/components/ui/LoadingDots'
-import CandidateList from '@/components/editor/sections/credentials/CandidateList'
-import type { CandidatePlacement } from '@/app/api/ai/credentials/find-placements/route'
+import ClientList from '@/components/editor/sections/credentials/ClientList'
+import type { ClientPlacement } from '@/app/api/ai/credentials/find-placements/route'
 
 interface CredentialsEditorProps {
   data: CredentialsSection
@@ -265,10 +265,10 @@ interface AxisCardProps {
 }
 
 function AxisCard({ axis, index, deckContext, onUpdate, onRemove }: AxisCardProps) {
-  const [candidates, setCandidates] = useState<CandidatePlacement[]>([])
+  const [clients, setClients] = useState<ClientPlacement[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
-  const [showCandidates, setShowCandidates] = useState(false)
+  const [showClients, setShowClients] = useState(false)
 
   const acceptedIds = useMemo(
     () => new Set(axis.placements.map((p) => p.placementId).filter(Boolean) as string[]),
@@ -278,7 +278,7 @@ function AxisCard({ axis, index, deckContext, onUpdate, onRemove }: AxisCardProp
   async function handleFindPlacements() {
     setSearchLoading(true)
     setSearchError(null)
-    setShowCandidates(true)
+    setShowClients(true)
 
     try {
       const res = await fetch('/api/ai/credentials/find-placements', {
@@ -292,8 +292,8 @@ function AxisCard({ axis, index, deckContext, onUpdate, onRemove }: AxisCardProp
         throw new Error(payload.error ?? 'Request failed')
       }
 
-      const result = (await res.json()) as { candidates: CandidatePlacement[] }
-      setCandidates(result.candidates || [])
+      const result = (await res.json()) as { clients: ClientPlacement[] }
+      setClients(result.clients || [])
     } catch (err) {
       setSearchError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
@@ -301,15 +301,15 @@ function AxisCard({ axis, index, deckContext, onUpdate, onRemove }: AxisCardProp
     }
   }
 
-  function handleAcceptCandidate(candidate: CandidatePlacement) {
+  function handleAcceptClient(client: ClientPlacement) {
     const placementId = uuid()
     const placement: Placement = {
       id: placementId,
-      role: candidate.role,
-      company: candidate.company,
-      context: candidate.context,
-      year: candidate.year,
-      placementId: candidate.placementId,
+      role: client.role,
+      company: client.company,
+      context: client.context,
+      year: client.year,
+      placementId: client.placementId,
     }
     const newPlacements = [...axis.placements, placement]
     onUpdate({ placements: newPlacements })
@@ -318,7 +318,7 @@ function AxisCard({ axis, index, deckContext, onUpdate, onRemove }: AxisCardProp
     fetch('/api/companies/match', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ companyName: candidate.company }),
+      body: JSON.stringify({ companyName: client.company }),
     })
       .then((res) => res.json())
       .then((result: { url: string | null; confidence: string }) => {
@@ -447,7 +447,7 @@ function AxisCard({ axis, index, deckContext, onUpdate, onRemove }: AxisCardProp
         </div>
       )}
 
-      {/* Find placements / candidate list area */}
+      {/* Find placements / client list area */}
       <div className="border-t border-border px-4 py-3">
         {searchLoading ? (
           <div className="text-center py-6">
@@ -457,23 +457,23 @@ function AxisCard({ axis, index, deckContext, onUpdate, onRemove }: AxisCardProp
               Claude is querying the placement database for matches
             </p>
           </div>
-        ) : showCandidates && candidates.length > 0 ? (
+        ) : showClients && clients.length > 0 ? (
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-medium text-text-secondary">Candidate placements</p>
+              <p className="text-xs font-medium text-text-secondary">Client placements</p>
               <button
                 type="button"
-                onClick={() => setShowCandidates(false)}
+                onClick={() => setShowClients(false)}
                 className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
               >
-                Hide candidates
+                Hide list
               </button>
             </div>
-            <CandidateList
-              candidates={candidates}
+            <ClientList
+              clients={clients}
               acceptedIds={acceptedIds}
               contextLabel={axis.contextLabel}
-              onAccept={handleAcceptCandidate}
+              onAccept={handleAcceptClient}
             />
           </div>
         ) : (
@@ -487,15 +487,15 @@ function AxisCard({ axis, index, deckContext, onUpdate, onRemove }: AxisCardProp
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
               </svg>
-              <span>{candidates.length > 0 ? 'Search again' : 'Find placements'}</span>
+              <span>{clients.length > 0 ? 'Search again' : 'Find placements'}</span>
             </button>
-            {candidates.length > 0 && (
+            {clients.length > 0 && (
               <button
                 type="button"
-                onClick={() => setShowCandidates(true)}
+                onClick={() => setShowClients(true)}
                 className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-text-tertiary hover:text-text-secondary transition-colors"
               >
-                Show {candidates.length - acceptedIds.size} remaining candidates
+                Show {clients.length - acceptedIds.size} remaining clients
               </button>
             )}
           </div>

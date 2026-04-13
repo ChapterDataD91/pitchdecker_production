@@ -345,8 +345,18 @@ export const useAIStore = create<AIStore>((set, get) => ({
       }
     }
 
-    // Apply the change to the editor store
+    // Deep-merge nested objects the AI might only partially return, so a
+    // patch like { assessor: { bio: "..." } } doesn't wipe the other fields.
+    // (Shallow merge in updateSection would overwrite the whole object.)
     const editorStore = useEditorStore.getState()
+    if (change.sectionKey === 'assessment' && patch.assessor && typeof patch.assessor === 'object') {
+      const currentAssessor = editorStore.deck?.sections.assessment.assessor
+      if (currentAssessor) {
+        patch.assessor = { ...currentAssessor, ...(patch.assessor as Record<string, unknown>) }
+      }
+    }
+
+    // Apply the change to the editor store
     editorStore.updateSection(
       change.sectionKey,
       patch as Partial<DeckSections[keyof DeckSections]>,

@@ -15,15 +15,9 @@ export type DeckStatus = 'draft' | 'in-progress' | 'complete'
 
 export type FeeStructure = 'retainer' | 'contingency' | 'hybrid'
 
-export type AssessmentMethodType =
-  | 'behavioral-interview'
-  | 'case-study'
-  | 'psychometric'
-  | 'reference-check'
-  | 'competency-assessment'
-  | 'presentation'
-
 export type Weight = 1 | 2 | 3 | 4 | 5
+
+export type HoganPillarKey = 'HPI' | 'HDS' | 'MVPI'
 
 // ---------------------------------------------------------------------------
 // Cover
@@ -180,28 +174,41 @@ export interface TimelineSection {
 // Assessment
 // ---------------------------------------------------------------------------
 
-export interface AssessmentMethod {
-  id: string
-  type: AssessmentMethodType
+export interface AssessmentAssessor {
   name: string
+  title: string
+  photoUrl: string
+  bio: string
+}
+
+export interface AssessmentPillar {
+  key: HoganPillarKey
+  label: string
   description: string
-  enabled: boolean
 }
 
 export interface AssessmentSection {
-  methods: AssessmentMethod[]
+  assessor: AssessmentAssessor
+  pillars: AssessmentPillar[]
+  processDescription: string
+  purposes: string[]
+  costsNote: string
 }
 
 // ---------------------------------------------------------------------------
 // Personas
 // ---------------------------------------------------------------------------
 
+export type PersonaPoolSize = 'narrow' | 'moderate' | 'strong'
+
 export interface Persona {
   id: string
-  name: string
+  title: string
   description: string
-  characteristics: string[]
-  color: string
+  poolSize: PersonaPoolSize
+  poolRangeLabel: string
+  poolRationale: string
+  order: number
 }
 
 export interface PersonasSection {
@@ -388,7 +395,16 @@ export function createEmptyDeck(
       totalWeeks: 0,
     },
     assessment: {
-      methods: [],
+      assessor: {
+        name: '',
+        title: '',
+        photoUrl: '',
+        bio: '',
+      },
+      pillars: [],
+      processDescription: '',
+      purposes: [],
+      costsNote: '',
     },
     personas: {
       archetypes: [],
