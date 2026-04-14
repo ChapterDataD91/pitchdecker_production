@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { ScorecardSection, ScorecardCriterion, Weight } from '@/lib/types'
 import { useEditorStore } from '@/lib/store/editor-store'
 import LoadingDots from '@/components/ui/LoadingDots'
+import WeightSelector from '@/components/ui/WeightSelector'
 
 interface ScorecardEditorProps {
   data: ScorecardSection
@@ -48,34 +49,6 @@ function isScorecardEmpty(data: ScorecardSection): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Weight dots
-// ---------------------------------------------------------------------------
-
-function WeightDots({
-  weight,
-  onChange,
-}: {
-  weight: Weight
-  onChange: (w: Weight) => void
-}) {
-  return (
-    <div className="flex items-center gap-1">
-      {([1, 2, 3, 4, 5] as Weight[]).map((w) => (
-        <button
-          key={w}
-          type="button"
-          onClick={() => onChange(w)}
-          className={`h-2 w-2 rounded-full transition-colors ${
-            w <= weight ? 'bg-accent' : 'bg-bg-muted hover:bg-border-strong'
-          }`}
-          aria-label={`Weight ${w}`}
-        />
-      ))}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Criterion row
 // ---------------------------------------------------------------------------
 
@@ -99,8 +72,8 @@ function CriterionRow({
         placeholder="Describe criterion..."
       />
       <div className="mt-1.5 shrink-0">
-        <WeightDots
-          weight={criterion.weight}
+        <WeightSelector
+          value={criterion.weight}
           onChange={(w) => onUpdate({ ...criterion, weight: w })}
         />
       </div>

@@ -1,71 +1,694 @@
 'use client'
 
-import type { CandidatesSection } from '@/lib/types'
+import { useMemo, useState } from 'react'
+import type {
+  Candidate,
+  CandidatesSection,
+  Persona,
+  CandidateScore,
+} from '@/lib/types'
+import { useEditorStore } from '@/lib/store/editor-store'
+import UploadZone from './candidates/UploadZone'
+import CandidateDetailPanel from './candidates/CandidateDetailPanel'
+import LoadingDots from '@/components/ui/LoadingDots'
 
 interface CandidatesEditorProps {
   data: CandidatesSection
   onChange: (data: CandidatesSection) => void
 }
 
+interface PendingUpload {
+  tempId: string
+  fileName: string
+  error?: string
+}
+
+// ---------------------------------------------------------------------------
+// Persona colour mapping — stable across the deck based on persona index.
+// ---------------------------------------------------------------------------
+
+const PERSONA_COLORS = [
+  'bg-fn-teal-bg text-fn-teal-fg border-fn-teal-bg',
+  'bg-fn-sage-bg text-fn-sage-fg border-fn-sage-bg',
+  'bg-fn-sand-bg text-fn-sand-fg border-fn-sand-bg',
+  'bg-fn-lilac-bg text-fn-lilac-fg border-fn-lilac-bg',
+  'bg-fn-copper-bg text-fn-copper-fg border-fn-copper-bg',
+]
+
+function personaColorFor(index: number): string {
+  return PERSONA_COLORS[index % PERSONA_COLORS.length]
+}
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0][0].toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+function shortPersonaLabel(title: string): string {
+  // "The Healthcare-Tech Leader" → "HEALTHCARE-TECH LEADER"
+  return title.replace(/^The\s+/i, '').toUpperCase()
+}
+
+function recomputeRankings(candidates: Candidate[]): Candidate[] {
+  const hasAnyScore = candidates.some((c) => c.overallScore > 0)
+  if (!hasAnyScore) return candidates
+  const sorted = [...candidates].sort((a, b) => b.overallScore - a.overallScore)
+  const rankById = new Map(
+    sorted.map((c, i) => [c.id, c.overallScore > 0 ? i + 1 : 0]),
+  )
+  return candidates.map((c) => ({ ...c, ranking: rankById.get(c.id) ?? 0 }))
+}
+
+// ---------------------------------------------------------------------------
+// Editor
+// ---------------------------------------------------------------------------
+
 export default function CandidatesEditor({
   data,
   onChange,
 }: CandidatesEditorProps) {
-  void data
-  void onChange
+  const deck = useEditorStore((s) => s.deck)
+  const [pending, setPending] = useState<PendingUpload[]>([])
+  const [scoringIds, setScoringIds] = useState<Set<string>>(new Set())
+  const [scoreError, setScoreError] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  const personas: Persona[] = useMemo(
+    () => deck?.sections.personas?.archetypes ?? [],
+    [deck],
+  )
+  const personaIndexById = useMemo(() => {
+    const sorted = [...personas].sort((a, b) => a.order - b.order)
+    return new Map(sorted.map((p, i) => [p.id, i]))
+  }, [personas])
+
+  function updateCandidate(id: string, patch: Partial<Candidate>) {
+    const next = data.candidates.map((c) =>
+      c.id === id ? { ...c, ...patch } : c,
+    )
+    onChange({ candidates: recomputeRankings(next) })
+  }
+
+  function removeCandidate(id: string) {
+    const next = data.candidates.filter((c) => c.id !== id)
+    onChange({ candidates: recomputeRankings(next) })
+  }
+
+  // -- Upload --------------------------------------------------------------
+  //
+  // Multi-file upload previously raced: each parallel `uploadOne` captured
+  // `data.candidates` from the same render, so whoever resolved last
+  // overwrote the others' appends. Fix: a single local accumulator drives
+  // sequential uploads, so each completion appends to the running list
+  // rather than re-reading a stale closure.
+
+  async function handleFiles(files: File[]) {
+    // Show all pending skeletons up-front so the UI reflects intent.
+    const tempIds = files.map(() => `pending-${crypto.randomUUID()}`)
+    setPending((p) => [
+      ...p,
+      ...files.map((f, i) => ({ tempId: tempIds[i], fileName: f.name })),
+    ])
+
+    let working = [...data.candidates]
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const tempId = tempIds[i]
+
+      try {
+        const fd = new FormData()
+        fd.append('file', file)
+        if (personas.length > 0) {
+          fd.append('personas', JSON.stringify(personas))
+        }
+
+        const res = await fetch('/api/upload/candidate', {
+          method: 'POST',
+          body: fd,
+        })
+
+        if (!res.ok) {
+          const payload = (await res.json().catch(() => ({}))) as {
+            error?: string
+          }
+          throw new Error(payload.error ?? 'Parse failed')
+        }
+
+        const { candidate } = (await res.json()) as { candidate: Candidate }
+        working = [...working, candidate]
+        onChange({ candidates: recomputeRankings(working) })
+        setPending((p) => p.filter((x) => x.tempId !== tempId))
+      } catch (err) {
+        setPending((p) =>
+          p.map((x) =>
+            x.tempId === tempId
+              ? { ...x, error: err instanceof Error ? err.message : 'Failed' }
+              : x,
+          ),
+        )
+      }
+    }
+  }
+
+  function dismissPending(tempId: string) {
+    setPending((p) => p.filter((x) => x.tempId !== tempId))
+  }
+
+  // -- Scoring -------------------------------------------------------------
+
+  async function scoreOne(candidate: Candidate) {
+    if (!deck) return
+    const scorecard = deck.sections.scorecard
+    const totalCriteria =
+      scorecard.mustHaves.length +
+      scorecard.niceToHaves.length +
+      scorecard.leadership.length +
+      scorecard.successFactors.length
+    if (totalCriteria === 0) {
+      setScoreError('Scorecard is empty — define criteria first.')
+      return
+    }
+
+    setScoreError(null)
+    setScoringIds((s) => new Set(s).add(candidate.id))
+    try {
+      const res = await fetch('/api/ai/candidate/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          candidate: {
+            name: candidate.name,
+            summary: candidate.summary,
+            currentRole: candidate.currentRole,
+            currentCompany: candidate.currentCompany,
+            careerHistory: candidate.careerHistory,
+            education: candidate.education,
+            languages: candidate.languages,
+            rawCvText: candidate.rawCvText,
+          },
+          scorecard,
+          deckContext: {
+            clientName: deck.sections.cover.clientName || deck.clientName,
+            roleTitle: deck.sections.cover.roleTitle || deck.roleTitle,
+            coverIntro: deck.sections.cover.introParagraph || undefined,
+          },
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Scoring failed')
+      }
+      const { scores, overallScore } = (await res.json()) as {
+        scores: CandidateScore[]
+        overallScore: number
+      }
+      updateCandidate(candidate.id, {
+        scores,
+        overallScore,
+        status: 'scored',
+      })
+    } catch (err) {
+      setScoreError(err instanceof Error ? err.message : 'Scoring failed')
+    } finally {
+      setScoringIds((s) => {
+        const next = new Set(s)
+        next.delete(candidate.id)
+        return next
+      })
+    }
+  }
+
+  async function scoreAll() {
+    const unscored = data.candidates.filter((c) => c.overallScore === 0)
+    for (const c of unscored) {
+      // Sequential keeps Claude usage predictable and respects rate limits.
+      await scoreOne(c)
+    }
+  }
+
+  // -- Render --------------------------------------------------------------
+
+  const hasCandidates = data.candidates.length > 0
+  const hasPending = pending.length > 0
+  const unscoredCount = data.candidates.filter(
+    (c) => c.overallScore === 0,
+  ).length
+
+  if (!hasCandidates && !hasPending) {
+    return (
+      <div className="space-y-4">
+        <UploadZone variant="hero" onFilesSelected={handleFiles} />
+        <QueryDatabaseStub />
+      </div>
+    )
+  }
+
+  const sorted = [...data.candidates].sort((a, b) => {
+    if (a.ranking > 0 && b.ranking > 0) return a.ranking - b.ranking
+    if (a.ranking > 0) return -1
+    if (b.ranking > 0) return 1
+    return 0
+  })
 
   return (
     <div className="space-y-4">
-      {/* Upload zone */}
-      <div className="border-2 border-dashed border-border-dashed rounded-xl p-10 text-center cursor-pointer hover:border-accent hover:bg-accent-light transition-colors">
-        <div className="flex justify-center mb-3">
-          <svg className="h-8 w-8 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-          </svg>
-        </div>
-        <p className="text-base font-semibold text-text">Upload CVs</p>
-        <p className="mt-1 text-sm text-text-secondary">
-          Drag PDFs or Word documents here, or click to browse
-        </p>
-      </div>
+      <UploadZone variant="compact" onFilesSelected={handleFiles} />
 
-      {/* LinkedIn URL input */}
-      <div className="border border-border rounded-lg p-5">
-        <p className="text-xs font-semibold text-text-tertiary tracking-wide uppercase mb-3">
-          Or paste a LinkedIn profile URL
-        </p>
-        <div className="flex gap-2">
-          <input
-            type="url"
-            placeholder="https://linkedin.com/in/..."
-            className="flex-1 rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-          />
+      {/* Toolbar — score all */}
+      {unscoredCount > 0 && (
+        <div className="flex items-center justify-between rounded-lg border border-border bg-bg-subtle px-4 py-2.5">
+          <span className="text-xs text-text-secondary">
+            {unscoredCount} candidate{unscoredCount === 1 ? '' : 's'} not yet scored against the scorecard
+          </span>
           <button
             type="button"
-            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover transition-colors"
+            onClick={scoreAll}
+            disabled={scoringIds.size > 0}
+            className="text-xs font-medium text-accent hover:text-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
           >
-            Add
+            {scoringIds.size > 0 ? (
+              <>
+                <LoadingDots />
+                <span>Scoring…</span>
+              </>
+            ) : (
+              <span>Score all with AI</span>
+            )}
           </button>
+        </div>
+      )}
+
+      {scoreError && <p className="text-xs text-red-600 px-1">{scoreError}</p>}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {sorted.map((c) => (
+          <CandidateCard
+            key={c.id}
+            candidate={c}
+            personas={personas}
+            personaIndex={c.personaId ? personaIndexById.get(c.personaId) ?? null : null}
+            scoring={scoringIds.has(c.id)}
+            onOpen={() => setSelectedId(c.id)}
+            onChangePersona={(personaId) => updateCandidate(c.id, { personaId })}
+            onScore={() => scoreOne(c)}
+            onRemove={() => removeCandidate(c.id)}
+          />
+        ))}
+        {pending.map((p) => (
+          <PendingRow key={p.tempId} pending={p} onDismiss={dismissPending} />
+        ))}
+      </div>
+
+      <QueryDatabaseStub />
+
+      {/* Detail panel */}
+      {deck && (
+        <CandidateDetailPanel
+          open={selectedId !== null}
+          candidate={
+            data.candidates.find((c) => c.id === selectedId) ?? null
+          }
+          scorecard={deck.sections.scorecard}
+          scoring={selectedId !== null && scoringIds.has(selectedId)}
+          onClose={() => setSelectedId(null)}
+          onChange={(patch) => {
+            if (selectedId) updateCandidate(selectedId, patch)
+          }}
+          onRescore={() => {
+            const c = data.candidates.find((x) => x.id === selectedId)
+            if (c) scoreOne(c)
+          }}
+          onRemove={() => {
+            if (selectedId) {
+              removeCandidate(selectedId)
+              setSelectedId(null)
+            }
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// CandidateCard
+// ---------------------------------------------------------------------------
+
+function CandidateCard({
+  candidate,
+  personas,
+  personaIndex,
+  scoring,
+  onOpen,
+  onChangePersona,
+  onScore,
+  onRemove,
+}: {
+  candidate: Candidate
+  personas: Persona[]
+  personaIndex: number | null
+  scoring: boolean
+  onOpen: () => void
+  onChangePersona: (personaId: string | null) => void
+  onScore: () => void
+  onRemove: () => void
+}) {
+  const persona = candidate.personaId
+    ? personas.find((p) => p.id === candidate.personaId)
+    : null
+  const personaColor =
+    personaIndex !== null ? personaColorFor(personaIndex) : null
+
+  const scored = candidate.overallScore > 0
+
+  // Colour the ranking badge with the persona accent when one is matched.
+  const rankingBadgeClass = personaColor
+    ? `${personaColor} border`
+    : 'bg-bg-subtle text-text-secondary'
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onOpen()
+        }
+      }}
+      className="group relative rounded-lg border border-border bg-white p-4 transition-colors hover:border-border-strong hover:bg-bg-subtle cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+    >
+      {/* Top row: ranking badge + persona chip + remove */}
+      <div className="flex items-start gap-3 mb-3">
+        {/* Ranking badge (colour-coded to persona) */}
+        <div
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${rankingBadgeClass}`}
+        >
+          {candidate.ranking > 0 ? candidate.ranking : '—'}
+        </div>
+
+        {/* Avatar */}
+        <div className="shrink-0">
+          {candidate.photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={candidate.photoUrl}
+              alt={candidate.name}
+              className="h-12 w-12 rounded-md object-cover"
+            />
+          ) : (
+            <div className="flex h-12 w-12 items-center justify-center rounded-md bg-bg-muted text-sm font-semibold text-text-tertiary">
+              {getInitials(candidate.name)}
+            </div>
+          )}
+        </div>
+
+        {/* Name, role */}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-text truncate">
+            {candidate.name || 'Unnamed candidate'}
+            {candidate.age > 0 && (
+              <span className="font-normal text-text-secondary"> ({candidate.age})</span>
+            )}
+          </p>
+          <p className="mt-0.5 text-xs text-text-secondary truncate">
+            {candidate.currentRole}
+            {candidate.currentCompany ? ` at ${candidate.currentCompany}` : ''}
+          </p>
+        </div>
+
+        {/* Persona chip + picker */}
+        <div onClick={(e) => e.stopPropagation()}>
+          <PersonaChip
+            persona={persona}
+            personaColor={personaColor}
+            fallbackTag={candidate.archetypeTag}
+            personas={personas}
+            onChange={onChangePersona}
+          />
         </div>
       </div>
 
-      {/* Query database card */}
-      <div className="border border-border rounded-lg p-5 flex items-center justify-between cursor-pointer hover:bg-bg-subtle transition-colors group">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-accent-light">
-            <svg className="h-4.5 w-4.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-text">Query candidate database</p>
-            <p className="text-sm text-text-secondary">Search your existing candidate pool by skills and experience</p>
-          </div>
-        </div>
-        <svg className="h-5 w-5 text-text-tertiary group-hover:text-text-secondary transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-        </svg>
+      {/* Summary */}
+      {candidate.summary && (
+        <p className="text-xs text-text-secondary leading-relaxed line-clamp-3 mb-3">
+          {candidate.summary}
+        </p>
+      )}
+
+      {/* Score row */}
+      <div className="flex items-center gap-3">
+        {scored ? (
+          <>
+            <span className="text-xl font-semibold text-text tabular-nums">
+              {candidate.overallScore}%
+            </span>
+            <div className="flex-1 h-1.5 rounded-full bg-bg-muted overflow-hidden">
+              <div
+                className="h-full bg-accent rounded-full transition-all"
+                style={{ width: `${candidate.overallScore}%` }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onScore() }}
+              disabled={scoring}
+              className="text-[11px] font-medium text-text-tertiary hover:text-accent transition-colors disabled:opacity-50"
+              title="Re-score with the current scorecard"
+            >
+              {scoring ? 'Scoring…' : 'Re-score'}
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="text-xs text-text-tertiary">Not yet scored</span>
+            <div className="flex-1" />
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onScore() }}
+              disabled={scoring}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:text-accent-hover transition-colors disabled:opacity-50"
+            >
+              {scoring ? (
+                <>
+                  <LoadingDots />
+                  <span>Scoring…</span>
+                </>
+              ) : (
+                <span>Score against criteria</span>
+              )}
+            </button>
+          </>
+        )}
       </div>
+
+      {/* Footer: file + remove */}
+      <div className="mt-3 flex items-center justify-between">
+        {candidate.cvFileName && (
+          <span className="text-[11px] text-text-tertiary truncate">
+            {candidate.cvFileName}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onRemove() }}
+          className="text-[11px] text-text-tertiary opacity-0 group-hover:opacity-100 hover:text-error transition-all ml-auto"
+          aria-label="Remove candidate"
+        >
+          Remove
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// PersonaChip — a chip that opens a dropdown picker on click
+// ---------------------------------------------------------------------------
+
+function PersonaChip({
+  persona,
+  personaColor,
+  fallbackTag,
+  personas,
+  onChange,
+}: {
+  persona: Persona | null | undefined
+  personaColor: string | null
+  fallbackTag: string
+  personas: Persona[]
+  onChange: (personaId: string | null) => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  const sorted = [...personas].sort((a, b) => a.order - b.order)
+
+  const label = persona
+    ? shortPersonaLabel(persona.title)
+    : fallbackTag || 'Match persona'
+
+  const chipClasses = persona && personaColor
+    ? `border ${personaColor}`
+    : 'border border-border bg-bg-subtle text-text-tertiary'
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ${chipClasses} ${
+          personas.length === 0 ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
+        }`}
+        disabled={personas.length === 0}
+        title={
+          personas.length === 0
+            ? 'Define personas in the Personas section to tag candidates'
+            : 'Change persona'
+        }
+      >
+        <span className="truncate max-w-[12rem]">{label}</span>
+        {personas.length > 0 && (
+          <svg className="h-2.5 w-2.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+          </svg>
+        )}
+      </button>
+
+      {open && personas.length > 0 && (
+        <>
+          {/* Click-outside backdrop */}
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 mt-1 w-64 rounded-md border border-border bg-white shadow-lg z-20 overflow-hidden">
+            <div className="p-1">
+              {sorted.map((p) => {
+                const active = p.id === persona?.id
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      onChange(p.id)
+                      setOpen(false)
+                    }}
+                    className={`w-full text-left rounded px-2 py-1.5 text-xs transition-colors ${
+                      active
+                        ? 'bg-accent-light text-accent'
+                        : 'text-text-secondary hover:bg-bg-subtle'
+                    }`}
+                  >
+                    <span className="block font-semibold">{p.title}</span>
+                    <span className="block text-[10px] text-text-tertiary line-clamp-2 mt-0.5">
+                      {p.description}
+                    </span>
+                  </button>
+                )
+              })}
+              {persona && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(null)
+                    setOpen(false)
+                  }}
+                  className="w-full text-left rounded px-2 py-1.5 text-xs text-text-tertiary hover:bg-bg-subtle transition-colors border-t border-border-subtle mt-1"
+                >
+                  Clear persona
+                </button>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Pending row (upload in-progress or failed)
+// ---------------------------------------------------------------------------
+
+function PendingRow({
+  pending,
+  onDismiss,
+}: {
+  pending: PendingUpload
+  onDismiss: (id: string) => void
+}) {
+  if (pending.error) {
+    return (
+      <div className="rounded-lg border border-border bg-bg p-4">
+        <p className="text-sm font-semibold text-text truncate">
+          {pending.fileName}
+        </p>
+        <p className="mt-1 text-xs text-rose-600">
+          Couldn&apos;t parse this CV: {pending.error}
+        </p>
+        <button
+          type="button"
+          onClick={() => onDismiss(pending.tempId)}
+          className="mt-2 text-xs font-medium text-accent hover:text-accent-hover transition-colors"
+        >
+          Dismiss
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-bg p-4 animate-pulse">
+      <div className="h-3 w-1/2 rounded bg-bg-subtle" />
+      <div className="mt-2 h-3 w-2/3 rounded bg-bg-subtle" />
+      <div className="mt-4 h-2 w-1/3 rounded bg-bg-subtle" />
+      <p className="mt-3 text-xs text-text-tertiary truncate">
+        Parsing {pending.fileName}…
+      </p>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Query database stub (Soon)
+// ---------------------------------------------------------------------------
+
+function QueryDatabaseStub() {
+  return (
+    <div
+      className="border border-border rounded-lg p-5 flex items-center justify-between opacity-80"
+      aria-disabled="true"
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-bg-subtle">
+          <svg
+            className="h-4 w-4 text-text-tertiary"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={1.5}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+            />
+          </svg>
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-text">
+            Query candidate database
+          </p>
+          <p className="text-sm text-text-secondary">
+            Coming soon — match your candidate pool against the search profile
+            and scorecard
+          </p>
+        </div>
+      </div>
+      <span className="text-xs font-medium text-text-tertiary uppercase tracking-wide">
+        Soon
+      </span>
     </div>
   )
 }

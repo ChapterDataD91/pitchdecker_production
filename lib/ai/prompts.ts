@@ -27,30 +27,51 @@ export function getAnalysisSystemPrompt(context: AISectionContext): string {
     case 'searchProfile':
       return `${base}
 
-Your task: Analyze the provided input and extract candidate evaluation criteria for the role of "${context.roleTitle}" at "${context.clientName}".
+Your task: Extract candidate evaluation criteria for the role of "${context.roleTitle}" at "${context.clientName}".
 
-Classify each criterion as either:
-- **mustHave**: Non-negotiable requirements the candidate must possess
-- **niceToHave**: Preferred qualifications that strengthen the candidacy
+## Format — every criterion MUST follow this shape
+\`<Short topic>: <concrete, quantified angle>\`
 
-Assign a weight from 1-5:
-- 5 = Critically important, dealbreaker if absent
-- 4 = Very important
-- 3 = Standard importance
-- 2 = Somewhat relevant
-- 1 = Minor consideration
+The topic is 1–3 words, title-case, followed by a colon. The angle is a single sharp clause that a reader can immediately verify against a CV or interview.
 
-Additionally, generate a **personalityProfile** with:
-- An **intro** sentence describing the client's culture and what type of personality the role demands (e.g. "The client has an ambitious, results-driven culture. The CEO must combine:")
-- A list of 3-5 **traits** — specific personality/leadership qualities as concise sentences (e.g. "Analytical depth to master complex business models across multiple revenue streams")
+Good examples (copy this density and specificity):
+- \`P&L leadership: CEO or GM at a company of ≥€50m revenue with full P&L accountability\`
+- \`M&A experience: Has led or integrated at least two acquisitions end-to-end\`
+- \`Languages: Dutch native or business fluent, plus English at working level\`
 
-Quality guidelines:
-- Be specific and measurable where possible
-- Avoid generic statements like "strong leadership skills" — specify what aspect matters
-- Consider the C-suite/senior executive context
-- Include both hard requirements (experience, qualifications) and soft factors (style, culture fit)
-- Aim for 5-10 criteria per analysis
-- Personality traits should be distinct from the criteria — focus on character, leadership style, and cultural fit${dedup}`
+Bad examples (do NOT produce):
+- \`Proven track record of strong leadership\`   ← vague, hedged, no angle
+- \`Ability to demonstrate excellent stakeholder management skills\` ← padded
+- \`Strategic thinker with commercial acumen\`   ← no anchor
+
+## Length caps
+- Must-haves: ≤ 18 words each.
+- Nice-to-haves: ≤ 12 words each.
+- No criterion wraps more than two lines of text.
+
+## Banned words and phrases
+Never use: "demonstrable", "proven track record", "strong", "excellent", "ability to", "demonstrated", "solid", "passionate", "dynamic". They signal nothing and waste space. Replace with the specific evidence that would make a consultant write that adjective.
+
+## Classification
+- **mustHave**: Non-negotiable. A candidate without this is excluded.
+- **niceToHave**: Strengthens candidacy. A candidate can still be presented without it.
+
+## Weight 1–5
+- 5 = dealbreaker if absent
+- 4 = very important
+- 3 = standard
+- 2 = somewhat relevant
+- 1 = minor consideration
+
+## Personality profile
+Also return a **personalityProfile**:
+- **intro**: one sentence on the client's culture and the personality demand, e.g. \`"The client has an ambitious, results-driven culture. The CEO must combine:"\`
+- **traits**: 3–5 concise, verifiable trait statements (same "topic — angle" discipline as criteria, but about character / leadership style rather than hard requirements).
+
+## Other rules
+- Aim for 6–10 criteria total.
+- Include hard requirements (experience, scale, sector) AND soft factors (leadership style, cultural fit) — but treat the soft factors with the same concrete-evidence bar.
+- Do not hedge. If you can't name the angle, don't output the criterion.${dedup}`
 
     case 'scorecard':
       return `${base}
@@ -452,6 +473,7 @@ export interface PersonasContext {
   personalityTraits?: string[]
   credentialAxes?: Array<{ name: string; description?: string }>
   consultantNotes?: string
+  keep?: Array<{ title: string; description: string }>
 }
 
 export function getPersonasSystemPrompt(context: PersonasContext): string {
@@ -477,6 +499,17 @@ export function getPersonasSystemPrompt(context: PersonasContext): string {
   const notes = context.consultantNotes
     ? `\n**Additional notes from the consultant:**\n${context.consultantNotes}`
     : ''
+  const keepBlock = context.keep?.length
+    ? `\n\n## Personas the consultant is KEEPING (do not propose these — propose distinct terrain):\n${context.keep
+        .map(
+          (p, i) =>
+            `${i + 1}. **${p.title}** — ${p.description}`,
+        )
+        .join('\n')}`
+    : ''
+  const countRule = context.keep?.length
+    ? `\n\n## Count\nReturn **exactly 1** new persona that covers terrain distinct from the kept ones above.`
+    : `\n\n## Count\nPropose **exactly 3 distinct candidate personas** that together map the viable sourcing terrain.`
 
   return `You are an expert executive search consultant at Top of Minds, a premium Dutch executive search firm. You are helping a consultant build the "Candidate Personas" section of a pitch deck — 3 anonymised archetypes illustrating the type of leader you expect to identify for this role.
 
@@ -484,11 +517,11 @@ export function getPersonasSystemPrompt(context: PersonasContext): string {
 - **Client**: ${context.clientName}
 - **Role**: ${context.roleTitle}
 ${context.coverIntro ? `- **Context**: ${context.coverIntro}` : ''}
-${mustHaves}${niceToHaves}${personality}${credentials}${notes}
+${mustHaves}${niceToHaves}${personality}${credentials}${notes}${keepBlock}${countRule}
 
 ## Your task
 
-Propose **exactly 3 distinct candidate personas** that together map the viable sourcing terrain for this role. Each persona represents a different type of background/profile a strong candidate might come from — not three variations of the same profile.
+Each persona represents a different type of background/profile a strong candidate might come from — not variations of the same profile.
 
 Think like a consultant pitching this search:
 - Where will you actually find candidates? Adjacent industries, scale-ups, PE-backed platforms, corporates, etc.

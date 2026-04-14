@@ -74,6 +74,7 @@ export default function PersonasEditor({ data, onChange }: PersonasEditorProps) 
 
   const previousRef = useRef<Persona[] | null>(null)
   const [appliedAction, setAppliedAction] = useState<'ai' | null>(null)
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null)
 
   const personas = [...data.archetypes].sort((a, b) => a.order - b.order)
   const hasPersonas = personas.length > 0
@@ -209,6 +210,70 @@ export default function PersonasEditor({ data, onChange }: PersonasEditorProps) 
     clearUndo()
   }
 
+  async function regenerateOne(persona: Persona) {
+    if (!deck) return
+    setRegeneratingId(persona.id)
+    setSuggestError(null)
+
+    try {
+      const { cover, searchProfile, credentials } = deck.sections
+      const keep = personas
+        .filter((p) => p.id !== persona.id)
+        .map((p) => ({ title: p.title, description: p.description }))
+
+      const res = await fetch('/api/ai/personas/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deckContext: {
+            clientName: cover.clientName || deck.clientName,
+            roleTitle: cover.roleTitle || deck.roleTitle,
+            coverIntro: cover.introParagraph || undefined,
+            mustHaves: searchProfile.mustHaves.map((c) => c.text),
+            niceToHaves: searchProfile.niceToHaves.map((c) => c.text),
+            personalityIntro: searchProfile.personalityProfile.intro || undefined,
+            personalityTraits: searchProfile.personalityProfile.traits,
+            credentialAxes: credentials.axes.map((a) => ({
+              name: a.name,
+              description: a.description,
+            })),
+            keep,
+          },
+        }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Failed to regenerate persona')
+      }
+
+      interface DraftPersona {
+        title: string
+        description: string
+        poolSize: PersonaPoolSize
+        poolRangeLabel: string
+        poolRationale: string
+      }
+      const result = (await res.json()) as { personas: DraftPersona[] }
+      const draft = result.personas[0]
+      if (!draft) throw new Error('No persona returned')
+
+      previousRef.current = personas
+      setAppliedAction('ai')
+      updatePersona(persona.id, {
+        title: draft.title,
+        description: draft.description,
+        poolSize: draft.poolSize,
+        poolRangeLabel: draft.poolRangeLabel,
+        poolRationale: draft.poolRationale,
+      })
+    } catch (err) {
+      setSuggestError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setRegeneratingId(null)
+    }
+  }
+
   // -- Render ----------------------------------------------------------------
 
   return (
@@ -321,6 +386,21 @@ export default function PersonasEditor({ data, onChange }: PersonasEditorProps) 
                     className="flex-1 text-base font-semibold text-text bg-transparent outline-none border-b border-transparent focus:border-accent transition-colors"
                   />
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={() => regenerateOne(persona)}
+                      disabled={regeneratingId === persona.id || suggestLoading}
+                      className="h-6 w-6 rounded flex items-center justify-center text-text-tertiary hover:text-accent hover:bg-accent-light transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Regenerate this persona (keep the others)"
+                    >
+                      {regeneratingId === persona.id ? (
+                        <LoadingDots />
+                      ) : (
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                        </svg>
+                      )}
+                    </button>
                     <button
                       type="button"
                       onClick={() => movePersona(index, -1)}

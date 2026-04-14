@@ -23,13 +23,13 @@ interface DraftPersona {
 
 const SUGGEST_PERSONAS_TOOL = {
   name: 'suggest_personas' as const,
-  description: 'Propose 3 candidate personas for an executive search pitch deck',
+  description: 'Propose candidate personas for an executive search pitch deck',
   input_schema: {
     type: 'object' as const,
     properties: {
       personas: {
         type: 'array' as const,
-        minItems: 3,
+        minItems: 1,
         maxItems: 3,
         items: {
           type: 'object' as const,
@@ -95,7 +95,9 @@ export async function POST(request: Request) {
       messages: [
         {
           role: 'user',
-          content: `Propose 3 candidate personas for an executive search targeting ${body.deckContext.clientName} for the role of ${body.deckContext.roleTitle}.`,
+          content: body.deckContext.keep?.length
+            ? `Propose 1 new candidate persona covering distinct terrain from the ${body.deckContext.keep.length} kept persona${body.deckContext.keep.length === 1 ? '' : 's'} for the ${body.deckContext.roleTitle} role at ${body.deckContext.clientName}.`
+            : `Propose 3 candidate personas for an executive search targeting ${body.deckContext.clientName} for the role of ${body.deckContext.roleTitle}.`,
         },
       ],
     })

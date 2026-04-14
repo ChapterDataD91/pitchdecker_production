@@ -46,8 +46,9 @@ export default function CoverEditor({ data, onChange }: CoverEditorProps) {
         <textarea
           placeholder="Write a compelling introduction paragraph for this pitch deck..."
           defaultValue={data.introParagraph}
-          rows={4}
-          className="w-full rounded-md border border-border bg-bg px-3 py-2.5 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent resize-none"
+          rows={3}
+          style={{ fieldSizing: 'content' } as React.CSSProperties}
+          className="w-full min-h-[5rem] rounded-md border border-border bg-bg px-3 py-2.5 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent resize-none"
         />
         <p className="mt-1.5 text-xs text-text-tertiary">
           This appears on the cover page below the title. Keep it concise and engaging.

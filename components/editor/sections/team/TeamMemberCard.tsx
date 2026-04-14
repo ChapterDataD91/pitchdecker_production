@@ -4,7 +4,8 @@ import { useState, useCallback } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { TeamMember } from '@/lib/types'
-import Toast from '@/components/ui/Toast'
+import { useEditorStore } from '@/lib/store/editor-store'
+import LoadingDots from '@/components/ui/LoadingDots'
 
 interface TeamMemberCardProps {
   member: TeamMember
@@ -21,7 +22,58 @@ export default function TeamMemberCard({
   onRemove,
   onMove,
 }: TeamMemberCardProps) {
-  const [showToast, setShowToast] = useState(false)
+  const [rewriteLoading, setRewriteLoading] = useState(false)
+  const [rewriteError, setRewriteError] = useState<string | null>(null)
+  const [rewritten, setRewritten] = useState<string | null>(null)
+
+  const deck = useEditorStore((s) => s.deck)
+
+  const handleRewrite = useCallback(async () => {
+    if (!deck) return
+    setRewriteLoading(true)
+    setRewriteError(null)
+    try {
+      const cover = deck.sections.cover
+      const res = await fetch('/api/ai/team/rewrite-bio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberName: member.name,
+          memberTitle: member.title,
+          currentBio: member.bio,
+          group,
+          deckContext: {
+            clientName: cover.clientName || deck.clientName,
+            roleTitle: cover.roleTitle || deck.roleTitle,
+            coverIntro: cover.introParagraph || undefined,
+          },
+        }),
+      })
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => ({}))) as {
+          error?: string
+        }
+        throw new Error(payload.error ?? 'Rewrite failed')
+      }
+      const { rewritten: result } = (await res.json()) as { rewritten: string }
+      setRewritten(result)
+    } catch (err) {
+      setRewriteError(err instanceof Error ? err.message : 'Rewrite failed')
+    } finally {
+      setRewriteLoading(false)
+    }
+  }, [deck, member.name, member.title, member.bio, group])
+
+  function acceptRewrite() {
+    if (rewritten) onBioChange(member.id, rewritten)
+    setRewritten(null)
+    setRewriteError(null)
+  }
+
+  function cancelRewrite() {
+    setRewritten(null)
+    setRewriteError(null)
+  }
 
   const {
     attributes,
@@ -137,14 +189,55 @@ export default function TeamMemberCard({
 
           {/* AI rewrite button — outside the text field */}
           <button
-            onClick={() => setShowToast(true)}
-            className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-border text-xs font-medium text-text-secondary hover:text-accent hover:border-accent hover:bg-accent-light transition-colors"
+            onClick={handleRewrite}
+            disabled={rewriteLoading || !deck}
+            className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-border text-xs font-medium text-text-secondary hover:text-accent hover:border-accent hover:bg-accent-light transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-            </svg>
-            Rewrite with AI
+            {rewriteLoading ? (
+              <>
+                <LoadingDots />
+                <span>Rewriting…</span>
+              </>
+            ) : (
+              <>
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                </svg>
+                Rewrite with AI
+              </>
+            )}
           </button>
+
+          {rewriteError && (
+            <p className="mt-2 text-xs text-rose-600">{rewriteError}</p>
+          )}
+
+          {rewritten !== null && (
+            <div className="mt-3 rounded-md border border-accent/40 bg-accent-light p-3 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-accent">
+                AI rewrite — preview
+              </p>
+              <p className="text-xs text-text leading-relaxed whitespace-pre-wrap">
+                {rewritten}
+              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={acceptRewrite}
+                  className="rounded-md bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover transition-colors"
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelRewrite}
+                  className="rounded-md px-3 py-1 text-xs font-medium text-text-secondary hover:text-text hover:bg-bg-hover transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Expertise tags */}
           {member.expertiseTags.length > 0 && (
@@ -161,13 +254,6 @@ export default function TeamMemberCard({
           )}
         </div>
       </div>
-
-      <Toast
-        message="AI bio rewrite coming soon"
-        type="info"
-        visible={showToast}
-        onClose={() => setShowToast(false)}
-      />
     </>
   )
 }

@@ -52,10 +52,12 @@ export default function ChatInput({
 
   const handleFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      if (!file) return
-      await onFileUpload(file)
-      // Reset input so the same file can be uploaded again
+      const files = Array.from(e.target.files ?? [])
+      if (files.length === 0) return
+      for (const file of files) {
+        await onFileUpload(file)
+      }
+      // Reset input so the same set can be re-selected
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
@@ -96,6 +98,7 @@ export default function ChatInput({
           ref={fileInputRef}
           type="file"
           accept={ACCEPTED_FILE_TYPES}
+          multiple
           onChange={handleFileChange}
           className="hidden"
         />

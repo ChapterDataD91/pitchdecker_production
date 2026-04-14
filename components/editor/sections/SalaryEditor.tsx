@@ -26,6 +26,21 @@ function parseAmount(value: string): number {
   return Number.isFinite(n) ? n : 0
 }
 
+// Interpolate p40 / p60 from the three quartile points we have.
+function interpolateTightBand(
+  p25: number,
+  p50: number,
+  p75: number,
+): { low: number; high: number } {
+  const p40 = p25 + (p50 - p25) * 0.6
+  const p60 = p50 + (p75 - p50) * 0.4
+  return { low: Math.round(p40), high: Math.round(p60) }
+}
+
+function formatEur(n: number): string {
+  return `€${Math.round(n).toLocaleString('en-US')}`
+}
+
 export default function SalaryEditor({ data, onChange }: SalaryEditorProps) {
   const roleTitle = useEditorStore((s) => s.deck?.roleTitle ?? '')
   const [benchmarkLoading, setBenchmarkLoading] = useState(false)
@@ -51,11 +66,18 @@ export default function SalaryEditor({ data, onChange }: SalaryEditorProps) {
       }
       const result = (await res.json()) as BenchmarkResult
       setBenchmarkResult(result)
-      if (result.n > 0 && result.p25 != null && result.p75 != null) {
-        update({
-          baseLow: Math.round(result.p25),
-          baseHigh: Math.round(result.p75),
-        })
+      if (
+        result.n > 0 &&
+        result.p25 != null &&
+        result.p50 != null &&
+        result.p75 != null
+      ) {
+        const { low, high } = interpolateTightBand(
+          result.p25,
+          result.p50,
+          result.p75,
+        )
+        update({ baseLow: low, baseHigh: high })
       }
     } catch (err) {
       setBenchmarkError(err instanceof Error ? err.message : 'Unknown error')
@@ -131,11 +153,24 @@ export default function SalaryEditor({ data, onChange }: SalaryEditorProps) {
         </div>
         {benchmarkResult && benchmarkResult.n > 0 && (
           <p className="mt-2 text-xs text-text-tertiary">
-            Based on {benchmarkResult.n} placement{benchmarkResult.n === 1 ? '' : 's'}
+            Based on {benchmarkResult.n} placement
+            {benchmarkResult.n === 1 ? '' : 's'}
             {benchmarkResult.roleTitleUsed && (
               <> matching &ldquo;{benchmarkResult.roleTitleUsed}&rdquo;</>
             )}{' '}
-            in the {benchmarkResult.periodLabel} (25th–75th percentile).
+            in the {benchmarkResult.periodLabel}. Showing the 40th–60th
+            percentile band
+            {benchmarkResult.p25 != null &&
+              benchmarkResult.p50 != null &&
+              benchmarkResult.p75 != null && (
+                <>
+                  {' '}
+                  — full spread p25 {formatEur(benchmarkResult.p25)} · median{' '}
+                  {formatEur(benchmarkResult.p50)} · p75{' '}
+                  {formatEur(benchmarkResult.p75)}
+                </>
+              )}
+            .
           </p>
         )}
         {benchmarkResult && benchmarkResult.n === 0 && (

@@ -239,7 +239,25 @@ export interface ScorecardSection {
 export interface CandidateScore {
   criterionId: string
   score: number
+  rationale?: string
 }
+
+export interface CareerEntry {
+  id: string
+  period: string
+  role: string
+  company: string
+  highlights: string[]
+}
+
+export interface EducationEntry {
+  id: string
+  period: string
+  degree: string
+  institution: string
+}
+
+export type CandidateStatus = 'parsing' | 'parsed' | 'scored' | 'error'
 
 export interface Candidate {
   id: string
@@ -250,9 +268,18 @@ export interface Candidate {
   age: number
   summary: string
   archetypeTag: string
+  personaId: string | null
   scores: CandidateScore[]
   overallScore: number
   ranking: number
+  status?: CandidateStatus
+  cvFileName?: string
+  rawCvText?: string
+  careerHistory?: CareerEntry[]
+  education?: EducationEntry[]
+  languages?: string[]
+  linkedinUrl?: string
+  parseError?: string
 }
 
 export interface CandidatesSection {
