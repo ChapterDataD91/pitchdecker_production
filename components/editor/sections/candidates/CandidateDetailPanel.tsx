@@ -78,6 +78,30 @@ export default function CandidateDetailPanel({
     onChange({ careerHistory: history })
   }
 
+  // Mirrors the server-side formula in /api/ai/candidate/score/route.ts.
+  // Weighted percentage across every criterion in the scorecard (missing
+  // scores don't count toward the denominator so partial scoring doesn't
+  // unfairly depress the total).
+  function computeOverall(scores: CandidateScore[]): number {
+    const allCriteria: ScorecardCriterion[] = [
+      ...scorecard.mustHaves,
+      ...scorecard.niceToHaves,
+      ...scorecard.leadership,
+      ...scorecard.successFactors,
+    ]
+    if (allCriteria.length === 0) return 0
+    const byId = new Map(scores.map((s) => [s.criterionId, s.score]))
+    let weightedSum = 0
+    let weightTotal = 0
+    for (const c of allCriteria) {
+      const s = byId.get(c.id)
+      if (typeof s !== 'number') continue
+      weightedSum += s * c.weight
+      weightTotal += 5 * c.weight
+    }
+    return weightTotal === 0 ? 0 : Math.round((weightedSum / weightTotal) * 100)
+  }
+
   function setScore(criterion: ScorecardCriterion, score: number) {
     const existing = scoresById.get(criterion.id)
     const nextScores: CandidateScore[] = candidate!.scores.some(
@@ -90,7 +114,7 @@ export default function CandidateDetailPanel({
           ...candidate!.scores,
           { criterionId: criterion.id, score, rationale: existing?.rationale },
         ]
-    onChange({ scores: nextScores })
+    onChange({ scores: nextScores, overallScore: computeOverall(nextScores) })
   }
 
   function setRationale(criterionId: string, rationale: string) {

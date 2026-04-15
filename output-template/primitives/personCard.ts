@@ -23,14 +23,14 @@ export const personCardCss = `
 }
 .tc-img {
   width: 100%;
-  height: 240px;
+  aspect-ratio: 9 / 10;
+  height: auto;
   object-fit: cover;
-  object-position: center 40%;
   display: block;
 }
 .tc-img-placeholder {
   width: 100%;
-  height: 240px;
+  aspect-ratio: 9 / 10;
   background: linear-gradient(135deg, var(--bg2), var(--bl));
   display: flex;
   align-items: center;

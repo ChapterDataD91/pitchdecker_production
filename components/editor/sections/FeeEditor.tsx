@@ -1,30 +1,87 @@
 'use client'
 
 // ---------------------------------------------------------------------------
-// Fee editor — UI stub.
+// Fee editor — full form wiring for the flat-fee shape.
 //
-// Renders inputs for the new flat-fee FeeSection shape (amount + instalments +
-// guarantee + addons). Wiring `onChange` and the add/remove behaviour for
-// instalments + addons is deferred to a later phase; this file currently just
-// shows defaults so the editor sidebar isn't blank.
+// Fields: amount, currency, vatNote, instalments[{label, trigger}],
+// guaranteeMonths, guaranteeNote, addons[{label, amount, description}].
+//
+// Each field pushes the updated section through `onChange` on blur / change;
+// the parent section-level auto-save debouncer handles persistence.
 // ---------------------------------------------------------------------------
 
-import type { FeeSection } from '@/lib/types'
+import { useState } from 'react'
+import type { FeeSection, FeeInstalment, FeeAddon } from '@/lib/types'
 
 interface FeeEditorProps {
   data: FeeSection
   onChange: (data: FeeSection) => void
 }
 
-export default function FeeEditor({ data, onChange }: FeeEditorProps) {
-  void onChange
+function newInstalment(): FeeInstalment {
+  return { id: crypto.randomUUID(), label: '', trigger: '' }
+}
 
-  const formatAmount = (n: number): string =>
-    n > 0 ? n.toLocaleString('en-GB') : ''
+function newAddon(): FeeAddon {
+  return { id: crypto.randomUUID(), label: '', amount: 0, description: '' }
+}
+
+// Parse a currency-style numeric input ("100,000" or "100.000" → 100000)
+function parseAmount(input: string): number {
+  const digits = input.replace(/[^\d]/g, '')
+  if (!digits) return 0
+  const n = parseInt(digits, 10)
+  return Number.isFinite(n) ? n : 0
+}
+
+function formatAmount(n: number): string {
+  return n > 0 ? n.toLocaleString('en-GB') : ''
+}
+
+export default function FeeEditor({ data, onChange }: FeeEditorProps) {
+  // Local amount text lets the user type commas / spaces without fighting
+  // the formatter on every keystroke. We commit the parsed number on blur.
+  const [amountText, setAmountText] = useState<string>(formatAmount(data.amount))
+
+  function update<K extends keyof FeeSection>(key: K, value: FeeSection[K]) {
+    onChange({ ...data, [key]: value })
+  }
+
+  function addInstalment() {
+    update('instalments', [...data.instalments, newInstalment()])
+  }
+  function removeInstalment(id: string) {
+    update(
+      'instalments',
+      data.instalments.filter((i) => i.id !== id),
+    )
+  }
+  function updateInstalment(id: string, patch: Partial<FeeInstalment>) {
+    update(
+      'instalments',
+      data.instalments.map((i) => (i.id === id ? { ...i, ...patch } : i)),
+    )
+  }
+
+  function addAddon() {
+    update('addons', [...data.addons, newAddon()])
+  }
+  function removeAddon(id: string) {
+    update(
+      'addons',
+      data.addons.filter((a) => a.id !== id),
+    )
+  }
+  function updateAddon(id: string, patch: Partial<FeeAddon>) {
+    update(
+      'addons',
+      data.addons.map((a) => (a.id === id ? { ...a, ...patch } : a)),
+    )
+  }
 
   return (
     <div className="space-y-5">
-      {/* Fee amount + currency */}
+      {/* Fee amount + currency + VAT note */}
       <div className="grid grid-cols-[1fr_auto_1fr] gap-3">
         <div>
           <label className="block text-sm font-medium text-text mb-1.5">
@@ -35,7 +92,13 @@ export default function FeeEditor({ data, onChange }: FeeEditorProps) {
               type="text"
               inputMode="numeric"
               placeholder="100,000"
-              defaultValue={formatAmount(data.amount)}
+              value={amountText}
+              onChange={(e) => setAmountText(e.target.value)}
+              onBlur={() => {
+                const parsed = parseAmount(amountText)
+                setAmountText(formatAmount(parsed))
+                if (parsed !== data.amount) update('amount', parsed)
+              }}
               className="w-full rounded-md border border-border bg-bg px-3 py-2.5 pl-8 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
             />
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
@@ -50,7 +113,9 @@ export default function FeeEditor({ data, onChange }: FeeEditorProps) {
           <input
             type="text"
             placeholder="EUR"
-            defaultValue={data.currency}
+            value={data.currency}
+            onChange={(e) => update('currency', e.target.value.toUpperCase())}
+            maxLength={3}
             className="w-20 rounded-md border border-border bg-bg px-3 py-2.5 text-sm text-text uppercase placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
           />
         </div>
@@ -61,7 +126,8 @@ export default function FeeEditor({ data, onChange }: FeeEditorProps) {
           <input
             type="text"
             placeholder="excl. VAT"
-            defaultValue={data.vatNote}
+            value={data.vatNote}
+            onChange={(e) => update('vatNote', e.target.value)}
             className="w-full rounded-md border border-border bg-bg px-3 py-2.5 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
           />
         </div>
@@ -79,19 +145,21 @@ export default function FeeEditor({ data, onChange }: FeeEditorProps) {
           </label>
           <button
             type="button"
+            onClick={addInstalment}
             className="text-sm font-medium text-accent hover:text-accent-hover transition-colors"
           >
             + Add instalment
           </button>
         </div>
         <div className="border border-border rounded-lg overflow-hidden">
-          <div className="px-4 py-2.5 bg-bg-subtle border-b border-border grid grid-cols-12 gap-4">
-            <span className="col-span-4 text-xs font-medium text-text-tertiary uppercase tracking-wide">
+          <div className="px-4 py-2.5 bg-bg-subtle border-b border-border grid grid-cols-[1fr_2fr_auto] gap-4">
+            <span className="text-xs font-medium text-text-tertiary uppercase tracking-wide">
               Label
             </span>
-            <span className="col-span-8 text-xs font-medium text-text-tertiary uppercase tracking-wide">
+            <span className="text-xs font-medium text-text-tertiary uppercase tracking-wide">
               Trigger
             </span>
+            <span className="w-7" aria-hidden />
           </div>
           {data.instalments.length === 0 ? (
             <div className="p-6 text-center">
@@ -106,14 +174,37 @@ export default function FeeEditor({ data, onChange }: FeeEditorProps) {
             data.instalments.map((inst) => (
               <div
                 key={inst.id}
-                className="px-4 py-3 border-b border-border last:border-b-0 grid grid-cols-12 gap-4"
+                className="px-4 py-2.5 border-b border-border last:border-b-0 grid grid-cols-[1fr_2fr_auto] gap-4 items-center"
               >
-                <span className="col-span-4 text-sm font-medium text-text">
-                  {inst.label}
-                </span>
-                <span className="col-span-8 text-sm text-text-secondary">
-                  {inst.trigger}
-                </span>
+                <input
+                  type="text"
+                  placeholder="Engagement"
+                  value={inst.label}
+                  onChange={(e) =>
+                    updateInstalment(inst.id, { label: e.target.value })
+                  }
+                  className="rounded-md border border-transparent bg-transparent px-2 py-1.5 text-sm text-text font-medium placeholder:text-text-placeholder focus:outline-none focus:border-border focus:bg-white"
+                />
+                <input
+                  type="text"
+                  placeholder="at engagement"
+                  value={inst.trigger}
+                  onChange={(e) =>
+                    updateInstalment(inst.id, { trigger: e.target.value })
+                  }
+                  className="rounded-md border border-transparent bg-transparent px-2 py-1.5 text-sm text-text-secondary placeholder:text-text-placeholder focus:outline-none focus:border-border focus:bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeInstalment(inst.id)}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-error-light hover:text-error"
+                  aria-label={`Remove instalment ${inst.label || 'row'}`}
+                  title="Remove"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M2.5 4h11M6 4V2.5a1 1 0 011-1h2a1 1 0 011 1V4M4.5 4l.5 9.5a1 1 0 001 1h4a1 1 0 001-1L12 4" />
+                  </svg>
+                </button>
               </div>
             ))
           )}
@@ -129,8 +220,13 @@ export default function FeeEditor({ data, onChange }: FeeEditorProps) {
           <div className="relative w-32">
             <input
               type="number"
+              min={0}
               placeholder="12"
-              defaultValue={data.guaranteeMonths || ''}
+              value={data.guaranteeMonths || ''}
+              onChange={(e) => {
+                const n = e.target.value === '' ? 0 : parseInt(e.target.value, 10)
+                update('guaranteeMonths', Number.isFinite(n) && n >= 0 ? n : 0)
+              }}
               className="w-full rounded-md border border-border bg-bg px-3 py-2.5 pr-16 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
@@ -144,7 +240,8 @@ export default function FeeEditor({ data, onChange }: FeeEditorProps) {
           </label>
           <textarea
             placeholder="e.g. Free replacement search if the appointed candidate leaves within the guarantee window."
-            defaultValue={data.guaranteeNote}
+            value={data.guaranteeNote}
+            onChange={(e) => update('guaranteeNote', e.target.value)}
             rows={2}
             className="w-full rounded-md border border-border bg-bg px-3 py-2.5 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent resize-none"
           />
@@ -163,6 +260,7 @@ export default function FeeEditor({ data, onChange }: FeeEditorProps) {
           </label>
           <button
             type="button"
+            onClick={addAddon}
             className="text-sm font-medium text-accent hover:text-accent-hover transition-colors"
           >
             + Add add-on
@@ -176,27 +274,105 @@ export default function FeeEditor({ data, onChange }: FeeEditorProps) {
             </p>
           </div>
         ) : (
-          <div className="border border-border rounded-lg divide-y divide-border">
+          <div className="space-y-2">
             {data.addons.map((a) => (
-              <div key={a.id} className="px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-text">
-                    {a.label}
-                  </span>
-                  <span className="text-sm font-mono text-text-secondary">
-                    €{formatAmount(a.amount)}
-                  </span>
-                </div>
-                {a.description && (
-                  <p className="mt-1 text-xs text-text-secondary">
-                    {a.description}
-                  </p>
-                )}
-              </div>
+              <AddonRow
+                key={a.id}
+                addon={a}
+                currency={data.currency}
+                onChange={(patch) => updateAddon(a.id, patch)}
+                onRemove={() => removeAddon(a.id)}
+              />
             ))}
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Add-on row — its own component so the local amount-text state doesn't
+// collide with sibling rows' state (React's reconciliation by key).
+// ---------------------------------------------------------------------------
+
+function AddonRow({
+  addon,
+  currency,
+  onChange,
+  onRemove,
+}: {
+  addon: FeeAddon
+  currency: string
+  onChange: (patch: Partial<FeeAddon>) => void
+  onRemove: () => void
+}) {
+  const [amountText, setAmountText] = useState<string>(formatAmount(addon.amount))
+  const symbol =
+    currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : currency === 'USD' ? '$' : ''
+
+  return (
+    <div className="border border-border rounded-lg p-3">
+      <div className="grid grid-cols-[1fr_auto_auto] gap-3 mb-2 items-end">
+        <div>
+          <label className="block text-xs font-medium text-text-tertiary uppercase tracking-wide mb-1">
+            Label
+          </label>
+          <input
+            type="text"
+            placeholder="Management Team Assessment"
+            value={addon.label}
+            onChange={(e) => onChange({ label: e.target.value })}
+            className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text font-medium placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-text-tertiary uppercase tracking-wide mb-1">
+            Amount
+          </label>
+          <div className="relative w-40">
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="20,000"
+              value={amountText}
+              onChange={(e) => setAmountText(e.target.value)}
+              onBlur={() => {
+                const parsed = parseAmount(amountText)
+                setAmountText(formatAmount(parsed))
+                if (parsed !== addon.amount) onChange({ amount: parsed })
+              }}
+              className="w-full rounded-md border border-border bg-bg px-3 py-2 pl-7 text-sm text-text font-mono placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+            />
+            {symbol && (
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
+                {symbol}
+              </span>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="mb-0.5 flex h-8 w-8 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-error-light hover:text-error"
+          aria-label={`Remove add-on ${addon.label || 'row'}`}
+          title="Remove"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2.5 4h11M6 4V2.5a1 1 0 011-1h2a1 1 0 011 1V4M4.5 4l.5 9.5a1 1 0 001 1h4a1 1 0 001-1L12 4" />
+          </svg>
+        </button>
+      </div>
+      <label className="block text-xs font-medium text-text-tertiary uppercase tracking-wide mb-1">
+        Description
+      </label>
+      <textarea
+        placeholder="Brief explanation shown in the published deck"
+        value={addon.description}
+        onChange={(e) => onChange({ description: e.target.value })}
+        rows={2}
+        className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent resize-none"
+      />
     </div>
   )
 }

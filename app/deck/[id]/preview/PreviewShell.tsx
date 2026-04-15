@@ -9,7 +9,7 @@
 // output template (coranto-2 / cream bg).
 // ---------------------------------------------------------------------------
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface CandidateEntry {
@@ -42,6 +42,25 @@ export default function PreviewShell({
     view.kind === 'main'
       ? mainHtml
       : (candidates.find((c) => c.slug === view.slug)?.html ?? mainHtml)
+
+  // Bridge: the iframe's inline preview-bridge script posts navigation events
+  // up when a consultant clicks a candidate card (or prev/next / back links
+  // inside a candidate page). Relative hrefs don't resolve in srcDoc iframes,
+  // so without this bridge those clicks hit a 404.
+  useEffect(() => {
+    function handleMessage(e: MessageEvent) {
+      const data = e.data as { type?: string; slug?: string } | undefined
+      if (!data || typeof data !== 'object') return
+      if (data.type === 'pitchdecker:navigate-candidate' && data.slug) {
+        const exists = candidates.some((c) => c.slug === data.slug)
+        if (exists) setView({ kind: 'candidate', slug: data.slug })
+      } else if (data.type === 'pitchdecker:navigate-main') {
+        setView({ kind: 'main' })
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [candidates])
 
   return (
     <div className="flex h-screen w-full flex-col bg-bg">

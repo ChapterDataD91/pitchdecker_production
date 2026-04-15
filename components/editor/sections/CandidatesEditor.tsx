@@ -221,11 +221,77 @@ export default function CandidatesEditor({
     }
   }
 
+  // scoreAll walks through unscored candidates sequentially, but it cannot
+  // delegate to scoreOne because scoreOne's updateCandidate reads
+  // data.candidates from the stale render closure — after the first iteration
+  // succeeds, every subsequent updateCandidate would compute `next` from the
+  // pre-click snapshot and overwrite earlier results. Same bug pattern the
+  // upload path already solved by accumulating into a local working array.
   async function scoreAll() {
-    const unscored = data.candidates.filter((c) => c.overallScore === 0)
-    for (const c of unscored) {
-      // Sequential keeps Claude usage predictable and respects rate limits.
-      await scoreOne(c)
+    if (!deck) return
+    const scorecard = deck.sections.scorecard
+    const totalCriteria =
+      scorecard.mustHaves.length +
+      scorecard.niceToHaves.length +
+      scorecard.leadership.length +
+      scorecard.successFactors.length
+    if (totalCriteria === 0) {
+      setScoreError('Scorecard is empty — define criteria first.')
+      return
+    }
+    setScoreError(null)
+
+    let working = [...data.candidates]
+    const unscored = working.filter((c) => c.overallScore === 0)
+
+    for (const target of unscored) {
+      setScoringIds((s) => new Set(s).add(target.id))
+      try {
+        const res = await fetch('/api/ai/candidate/score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            candidate: {
+              name: target.name,
+              summary: target.summary,
+              currentRole: target.currentRole,
+              currentCompany: target.currentCompany,
+              careerHistory: target.careerHistory,
+              education: target.education,
+              languages: target.languages,
+              rawCvText: target.rawCvText,
+            },
+            scorecard,
+            deckContext: {
+              clientName: deck.sections.cover.clientName || deck.clientName,
+              roleTitle: deck.sections.cover.roleTitle || deck.roleTitle,
+              coverIntro: deck.sections.cover.introParagraph || undefined,
+            },
+          }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error(err.error || 'Scoring failed')
+        }
+        const { scores, overallScore } = (await res.json()) as {
+          scores: CandidateScore[]
+          overallScore: number
+        }
+        working = working.map((c) =>
+          c.id === target.id
+            ? { ...c, scores, overallScore, status: 'scored' as const }
+            : c,
+        )
+        onChange({ candidates: recomputeRankings(working) })
+      } catch (err) {
+        setScoreError(err instanceof Error ? err.message : 'Scoring failed')
+      } finally {
+        setScoringIds((s) => {
+          const next = new Set(s)
+          next.delete(target.id)
+          return next
+        })
+      }
     }
   }
 

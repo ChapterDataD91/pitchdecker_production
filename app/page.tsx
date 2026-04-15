@@ -11,9 +11,11 @@ import LoadingDots from '@/components/ui/LoadingDots'
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { decks, isLoading, error, fetchDecks, createDeck } = useDashboardStore()
+  const { decks, isLoading, error, fetchDecks, createDeck, deleteDeck } = useDashboardStore()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchDecks()
@@ -28,6 +30,13 @@ export default function DashboardPage() {
       setDialogOpen(false)
       router.push(`/deck/${id}`)
     }
+  }
+
+  async function handleConfirmDelete(id: string) {
+    setDeletingId(id)
+    await deleteDeck(id)
+    setDeletingId(null)
+    setPendingDelete(null)
   }
 
   function formatDate(dateStr: string) {
@@ -103,63 +112,123 @@ export default function DashboardPage() {
 
         {!isLoading && !error && decks.length > 0 && (
           <div className="grid gap-3">
-            {decks.map((deck, index) => (
-              <motion.button
-                key={deck.id}
-                onClick={() => router.push(`/deck/${deck.id}`)}
-                className="group flex items-center justify-between rounded-lg border border-border bg-bg px-5 py-4 text-left shadow-xs transition-all hover:border-accent hover:shadow-sm"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-              >
-                <div className="min-w-0 flex-1">
-                  <h3 className="truncate text-sm font-semibold text-text group-hover:text-accent">
-                    {deck.clientName}
-                  </h3>
-                  <p className="mt-0.5 text-xs text-text-secondary">{deck.roleTitle}</p>
-                </div>
+            {decks.map((deck, index) => {
+              const isPending = pendingDelete === deck.id
+              const isDeleting = deletingId === deck.id
 
-                <div className="flex items-center gap-5 pl-4">
-                  {/* Completion */}
-                  <span className="text-xs text-text-secondary">
-                    {deck.completedSections}/11
-                  </span>
+              return (
+                <motion.div
+                  key={deck.id}
+                  className="group relative flex items-center justify-between rounded-lg border border-border bg-bg px-5 py-4 text-left shadow-xs transition-all hover:border-accent hover:shadow-sm"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                >
+                  {isPending ? (
+                    /* Confirmation overlay */
+                    <div className="flex w-full items-center justify-between gap-4">
+                      <p className="truncate text-sm text-text">
+                        Delete <span className="font-semibold">{deck.clientName}</span>
+                        <span className="text-text-secondary"> — {deck.roleTitle}</span>?{' '}
+                        <span className="text-text-tertiary">This cannot be undone.</span>
+                      </p>
+                      <div className="flex shrink-0 gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setPendingDelete(null)
+                          }}
+                          className="rounded-md px-3 py-1.5 text-sm font-medium text-text-secondary transition-colors hover:bg-bg-hover hover:text-text"
+                          disabled={isDeleting}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleConfirmDelete(deck.id)
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-error px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-error/90 disabled:opacity-60"
+                          disabled={isDeleting}
+                        >
+                          {isDeleting ? <LoadingDots /> : 'Delete'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => router.push(`/deck/${deck.id}`)}
+                        className="flex min-w-0 flex-1 items-center justify-between text-left"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <h3 className="truncate text-sm font-semibold text-text group-hover:text-accent">
+                            {deck.clientName}
+                          </h3>
+                          <p className="mt-0.5 text-xs text-text-secondary">{deck.roleTitle}</p>
+                        </div>
 
-                  {/* Status badge */}
-                  <span
-                    className={`rounded-md px-2 py-0.5 text-xs font-medium ${
-                      deck.status === 'complete'
-                        ? 'bg-success-light text-success'
-                        : 'bg-bg-muted text-text-secondary'
-                    }`}
-                  >
-                    {deck.status === 'draft' ? 'Draft' : deck.status === 'in-progress' ? 'In Progress' : 'Complete'}
-                  </span>
+                        <div className="flex items-center gap-5 pl-4">
+                          {/* Completion */}
+                          <span className="text-xs text-text-secondary">
+                            {deck.completedSections}/11
+                          </span>
 
-                  {/* Date */}
-                  <span className="hidden text-xs text-text-tertiary sm:inline">
-                    {formatDate(deck.updatedAt)}
-                  </span>
+                          {/* Status badge */}
+                          <span
+                            className={`rounded-md px-2 py-0.5 text-xs font-medium ${
+                              deck.status === 'complete'
+                                ? 'bg-success-light text-success'
+                                : 'bg-bg-muted text-text-secondary'
+                            }`}
+                          >
+                            {deck.status === 'draft' ? 'Draft' : deck.status === 'in-progress' ? 'In Progress' : 'Complete'}
+                          </span>
 
-                  {/* Arrow */}
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    className="shrink-0 text-text-tertiary transition-colors group-hover:text-accent"
-                  >
-                    <path
-                      d="M6 4L10 8L6 12"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </div>
-              </motion.button>
-            ))}
+                          {/* Date */}
+                          <span className="hidden text-xs text-text-tertiary sm:inline">
+                            {formatDate(deck.updatedAt)}
+                          </span>
+
+                          {/* Arrow */}
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            className="shrink-0 text-text-tertiary transition-colors group-hover:text-accent"
+                          >
+                            <path
+                              d="M6 4L10 8L6 12"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </div>
+                      </button>
+
+                      {/* Delete trigger — hover-revealed.
+                         TODO(sso): hide unless current user owns this deck. */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setPendingDelete(deck.id)
+                        }}
+                        className="ml-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-tertiary opacity-0 transition-all hover:bg-error-light hover:text-error focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-error group-hover:opacity-100"
+                        aria-label={`Delete ${deck.clientName} — ${deck.roleTitle}`}
+                        title="Delete deck"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M2.5 4h11M6 4V2.5a1 1 0 011-1h2a1 1 0 011 1V4M4.5 4l.5 9.5a1 1 0 001 1h4a1 1 0 001-1L12 4M6.5 7v5M9.5 7v5" />
+                        </svg>
+                      </button>
+                    </>
+                  )}
+                </motion.div>
+              )
+            })}
           </div>
         )}
       </main>

@@ -6,9 +6,11 @@
 import { accordionScript } from './accordion'
 import { progressBarScript } from './progressBar'
 import { scrollAnimationsScript } from './scrollAnimations'
+import { previewBridgeScript } from './previewBridge'
 
 export const allScripts: string = [
   accordionScript,
   progressBarScript,
   scrollAnimationsScript,
+  previewBridgeScript,
 ].join('\n')

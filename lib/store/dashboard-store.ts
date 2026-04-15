@@ -19,6 +19,7 @@ interface DashboardState {
 interface DashboardActions {
   fetchDecks: () => Promise<void>
   createDeck: (clientName: string, roleTitle: string) => Promise<string | null>
+  deleteDeck: (id: string) => Promise<boolean>
 }
 
 type DashboardStore = DashboardState & DashboardActions
@@ -71,6 +72,27 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
       const message = err instanceof Error ? err.message : 'Failed to create deck'
       set({ error: message })
       return null
+    }
+  },
+
+  // TODO(sso): scope to deck owner once user identity is wired. Today the route
+  // accepts the request from any caller; the UI's hover-to-reveal trash makes
+  // this a deliberate, low-friction action for the trusted internal user.
+  deleteDeck: async (id) => {
+    set({ error: null })
+
+    try {
+      const response = await fetch(`/api/deck/${id}`, { method: 'DELETE' })
+      if (!response.ok) {
+        throw new Error(`Failed to delete deck: ${response.status}`)
+      }
+      // Optimistic local removal so the UI doesn't wait for a refetch.
+      set((s) => ({ decks: s.decks.filter((d) => d.id !== id) }))
+      return true
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete deck'
+      set({ error: message })
+      return false
     }
   },
 }))
