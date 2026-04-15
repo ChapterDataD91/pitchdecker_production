@@ -101,6 +101,29 @@ not the client-facing output.
 - Every interactive element needs hover, focus, and active states
 - Every async action needs loading, success, and error states
 - Every list needs an empty state (helpful, not just blank)
+- **The editor and the output template at `/output-template/` are two separate
+  design systems.** The editor uses Tailwind, Inter, and the Notion-inspired
+  palette in `lib/theme.ts`. The output template uses inline CSS, coranto-2 +
+  Barlow, and the Top of Minds huisstijl in `output-template/brand.ts`. No
+  styling imports cross the boundary — enforced by `no-restricted-imports` in
+  `eslint.config.mjs`. Editor brand identity (sidebar label, page title, etc.)
+  lives in `config/brand.ts`; published deck identity lives in
+  `output-template/brand.ts`. The two brand objects are intentionally separate.
+- **Cross-tenant abstractions are deliberately deferred until a second client
+  exists.** When a second recruiter is onboarded, fork `/output-template/` to
+  `/output-templates/{tenant}/` rather than introducing a generic
+  brand/template engine speculatively.
+
+## Operational gotchas
+- **Next.js 16 + Turbopack module isolation.** Server components and API route
+  handlers compile into separate module graphs in dev. Module-level state
+  (e.g. an in-memory `Map`) is NOT shared between them. Persistent storage
+  (Mongo, Postgres) sidesteps this entirely; the deck-storage layer already
+  uses Mongo for that reason.
+- **Turbopack stale dev cache.** Editing a file imported transitively by a
+  server component sometimes does not propagate without a full dev restart.
+  Symptom: rendered output shows old content despite the source being correct.
+  Fix: kill the dev process, `rm -rf .next`, restart `npm run dev`.
 
 ## Interaction Model
 Sidebar + content editor: a fixed left sidebar (~240px) listing all 11 deck

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { editorBrand } from "@/config/brand";
 import "./globals.css";
 
 const inter = Inter({
@@ -9,7 +10,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "PitchDecker — Top of Minds",
+  title: editorBrand.appTitle,
   description: "Pitch deck authoring tool for executive search mandates",
 };
 

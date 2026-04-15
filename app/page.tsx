@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { useDashboardStore } from '@/lib/store/dashboard-store'
+import { editorBrand } from '@/config/brand'
 import CreateDeckDialog from '@/components/ui/CreateDeckDialog'
 import EmptyState from '@/components/ui/EmptyState'
 import LoadingDots from '@/components/ui/LoadingDots'
@@ -42,11 +43,24 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-bg">
       {/* Header */}
       <header className="border-b border-border bg-bg">
-        <div className="mx-auto max-w-4xl px-8 py-6">
-          <p className="text-[10px] font-bold uppercase tracking-[2.5px] text-text-secondary">
-            Top of Minds
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold text-text">Pitch Decks</h1>
+        <div className="mx-auto flex max-w-4xl items-end justify-between px-8 py-6">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[2.5px] text-text-secondary">
+              {editorBrand.name}
+            </p>
+            <h1 className="mt-1 text-2xl font-semibold text-text">Pitch Decks</h1>
+          </div>
+          {!isLoading && !error && decks.length > 0 && (
+            <button
+              onClick={() => setDialogOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              New Deck
+            </button>
+          )}
         </div>
       </header>
 

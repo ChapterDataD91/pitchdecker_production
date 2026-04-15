@@ -1,5 +1,31 @@
 # Top of Minds — Huisstijl
 
+> ⚠️ **Deprecated as source of truth.** This document was captured from an
+> earlier prototype (`proposal-tuesday-3.html`, March 2026) and has since
+> drifted from the actual demo proposal. Where this file disagrees with the
+> live demo at `/Users/daan/PitchDecker/Top of Minds — PitchDecker Demo
+> Proposal.html`, **the demo wins**.
+>
+> The authoritative tokens (palette, fonts, spacing) now live in:
+>
+> - `/output-template/brand.ts` — runtime token values (`--blue: #5a92b5`,
+>   etc.)
+> - `/output-template/primitives/*.ts` — per-component CSS
+>
+> Notable corrections vs. the text below:
+> - Accent blue is **`#5a92b5`** (dusty mid-blue), not `#B9D9EB` (pale).
+> - Cards, callouts, and tags **do** use `border-radius` (10–12px on cards,
+>   3–6px on badges, 50% on circles). Section §7's "no border-radius" rule
+>   is wrong.
+> - `.tc` cards have `border: 1px solid var(--ln)`; the "no borders" rule
+>   in §7 is also wrong.
+>
+> Keep this file as historical reference for the broader brand voice
+> (typography, image conventions, tone of voice) — but for any token or
+> visual decision, read `/output-template/brand.ts` first.
+
+---
+
 Vastgelegd op basis van `proposal-tuesday-3.html` en `CLAUDE.md` (maart 2026).
 
 ---

@@ -14,6 +14,8 @@
 - [Architecture](#architecture)
 - [Deck Sections](#deck-sections)
 - [AI Integration](#ai-integration)
+- [Output Template](#output-template)
+- [Publishing & Deployment](#publishing--deployment)
 - [API Reference](#api-reference)
 - [Data Layer](#data-layer)
 - [Design System](#design-system)
@@ -26,9 +28,14 @@
 
 PitchDecker is a full-stack Next.js application that replaces manual pitch deck creation with a guided, section-by-section editor. Each pitch deck contains 11 structured sections — from cover page to fee proposal — that together form a complete search mandate presentation.
 
-The tool is designed for internal use by Top of Minds consultants. It is **not** the client-facing output (that will be a separate published HTML template in a later phase).
+The app is two distinct surfaces sharing one repository:
 
-**Current status:** Phase 1 — the editor UI, AI-assisted content generation, and in-memory storage are functional. Database persistence, publishing, and the client-facing template are planned for subsequent phases.
+1. **The editor** — Notion-inspired authoring tool (this is what consultants use).
+2. **The output template** — the published, client-facing pitch deck in the Top of Minds huisstijl, generated from a typed `Deck` object and deployed to Azure Blob behind a PIN-gated Function viewer.
+
+The two are deliberately firewalled: separate design systems, separate brand objects, no styling crosses the boundary (enforced by `no-restricted-imports` in ESLint).
+
+**Current status:** Editor + AI assists + MongoDB persistence + output template + publish round-trip are all functional. Image upload UI and editor surfaces for a few new schema fields (assessment add-ons, candidate strengths/risks) are the remaining backlog items — see `docs/refactors/`.
 
 ---
 
@@ -54,26 +61,29 @@ Consultants interact with five distinct editor patterns:
 
 | Pattern | Sections | How it works |
 |---------|----------|--------------|
-| **Database pickers** | Team, Credentials | Slide-out panels with search and filter to select from existing data (e.g., search Algolia for consultants) |
-| **Structured input** | Search Profile, Scorecard | Categorized lists with weighted criteria, add/remove/reorder |
-| **Upload + enrichment** | Candidates | Upload CV or LinkedIn URL, parse with AI, review and score |
-| **Template-based** | Timeline, Assessment | Start from a template, adjust inline |
+| **Database pickers** | Team, Credentials | Slide-out panels with search and filter to select from existing data (e.g., search Algolia for consultants, query `cicero_mcp` for placements) |
+| **Structured input** | Search Profile, Scorecard | Categorized lists with weighted criteria; AI assists for suggestion + bulk accept |
+| **Upload + enrichment** | Candidates | Upload CV, parse with AI, score against the scorecard |
+| **Template-based** | Timeline, Assessment | Start from a template (e.g., 12-week search, Hogan assessor preset), adjust inline |
 | **Simple forms** | Cover, Salary, Fee | Form fields with optional benchmarks |
 
 ### AI Assistance
 
-The Search Profile editor includes an **AI Assist** panel that slides in from the right. Consultants can feed context through four input modes:
+AI is woven throughout the editor, not just one section:
 
-1. **Text** — Paste a job description, briefing notes, or any text
-2. **Document** — Upload a PDF, DOCX, or image (max 10MB)
-3. **Voice** — Record audio that gets transcribed via AssemblyAI
-4. **Web Search** — Enter a query; Claude searches the web for relevant context
+- **Search Profile:** Multi-modal suggest panel (text / document / voice / web search) returns weighted criteria.
+- **Scorecard, Personas, Timeline, Credentials:** Each has a "suggest" endpoint that uses the existing deck context to propose new entries.
+- **Team:** AI-assisted bio rewrite that tightens copy without losing facts.
+- **Candidates:** CV upload → structured profile parsing → automatic scoring against the deck's scorecard.
+- **Salary:** Benchmark lookup against comparable roles.
+- **Companies / placements:** Match against published Top of Minds pages and the cicero MCP placement index.
+- **Conversational chat:** Embedded chat that can call the cicero MCP toolset to answer free-form questions about the mandate.
 
-Claude analyzes the input and returns structured suggestions — each with a text, weight (1-5), category (must-have / nice-to-have), and reasoning. Consultants review suggestions individually or in bulk (Accept All / Dismiss All). Accepted suggestions are added directly to the appropriate section column.
+All AI responses use **Claude** (`claude-sonnet-4-6` for text and structured tool use; an image-capable model for document analysis).
 
 ### Preview
 
-A preview page exists at `/deck/[id]/preview` but is currently a placeholder. Phase 3 will implement the client-facing pitch deck output using the Top of Minds brand template.
+`/deck/[id]/preview` renders the actual published-deck HTML inside a sandboxed iframe, with editor chrome (back button, candidate-page switcher) wrapped around it. Because the iframe is sandboxed with its own document, the output template's CSS cannot leak into the editor and vice versa. The consultant sees exactly what the client will see.
 
 ---
 
@@ -81,20 +91,25 @@ A preview page exists at `/deck/[id]/preview` but is currently a placeholder. Ph
 
 | Layer | Technology | Version |
 |-------|-----------|---------|
-| Framework | Next.js (App Router) | 16.2.2 |
+| Framework | Next.js (App Router, Turbopack) | 16.2.2 |
 | UI | React | 19.2.4 |
 | Language | TypeScript (strict) | 5.x |
-| Styling | Tailwind CSS | 4.x |
-| Animation | Framer Motion | 12.38.0 |
+| Editor styling | Tailwind CSS | 4.x |
+| Output template styling | Inline `<style>` (no Tailwind) | — |
+| Animation | Framer Motion (editor only) | 12.38.0 |
 | Drag & Drop | @dnd-kit (core + sortable) | 6.3.1 / 10.0.0 |
 | State | Zustand | 5.0.12 |
 | Forms | React Hook Form + Zod | 7.72.0 / 4.3.6 |
-| AI | Anthropic SDK (@anthropic-ai/sdk) | 0.82.0 |
-| Transcription | AssemblyAI | 4.29.0 |
+| AI | Anthropic SDK (`@anthropic-ai/sdk`) | 0.82.0 |
+| MCP client | `@modelcontextprotocol/sdk` | 1.29.0 |
 | Document parsing | pdf-parse, mammoth | 2.4.5 / 1.12.0 |
+| Audio transcription | AssemblyAI | 4.29.0 |
+| Persistent storage | MongoDB Node driver | 7.1.1 |
+| Postgres client | `pg` | 8.20.0 |
+| Azure auth | `@azure/identity` | 4.13.1 |
 | IDs | uuid | 13.0.0 |
 
-**No UI libraries** — all components (modals, badges, toasts, slide-out panels) are custom-built.
+**No UI libraries** — all editor components (modals, badges, toasts, slide-out panels) are custom-built. The output template is dependency-free HTML + inline CSS + inline JS — no React, no bundler.
 
 ---
 
@@ -104,36 +119,42 @@ A preview page exists at `/deck/[id]/preview` but is currently a placeholder. Ph
 
 - Node.js 20+
 - npm
+- A reachable `cicero_mcp` server (the upstream MCP for placements, candidate enrichment, and `deployPitchdeck`). Locally: clone `cicero_mcp` and run with `SKIP_AUTH=true`.
+- A MongoDB connection (Atlas or local) for deck persistence.
 
 ### Environment Variables
 
-Create a `.env.local` file with the required API keys:
+Create a `.env.local` file with the required keys:
 
 ```env
-# Required for AI features
+# AI features
 ANTHROPIC_API_KEY=your_anthropic_key
 ASSEMBLYAI_API_KEY=your_assemblyai_key
 
-# Required for consultant search
+# Algolia consultant search
 ALGOLIA_APP_ID=your_algolia_app_id
 ALGOLIA_API_KEY=your_algolia_api_key
 ALGOLIA_CDN_BASE=https://cdn.media.topofminds.index.nl/
+
+# Cicero MCP (placements, deploy)
+CICERO_URL=http://localhost:3001/mcp     # or the deployed Container Apps URL
+SKIP_AUTH_TO_CICERO=true                 # dev only
+
+# MongoDB
+MONGODB_URI=mongodb+srv://...
+MONGODB_DB=pitchdecker
 ```
 
 ### Run Locally
 
 ```bash
-# Install dependencies
 npm install
-
-# Start development server
 npm run dev
 ```
 
 Or use the provided startup script:
 
 ```bash
-chmod +x start-local.sh
 ./start-local.sh
 ```
 
@@ -159,47 +180,52 @@ npm run lint
 ```
 pitchdecker_production/
 ├── app/
-│   ├── layout.tsx                          # Root layout (Inter font, metadata)
+│   ├── layout.tsx                          # Root layout (Inter font, metadata from config/brand.ts)
 │   ├── page.tsx                            # Dashboard — deck list & creation
 │   ├── globals.css                         # Global styles & Tailwind imports
 │   ├── deck/
 │   │   └── [id]/
 │   │       ├── page.tsx                    # Deck editor (sidebar + content)
 │   │       └── preview/
-│   │           └── page.tsx                # Preview placeholder (Phase 3)
+│   │           ├── page.tsx                # Server component — fetches deck, renders via @/output-template
+│   │           └── PreviewShell.tsx        # Client iframe wrapper with sandbox + candidate switcher
 │   └── api/
 │       ├── ai/
-│       │   ├── analyze-document/route.ts   # File upload → Claude analysis
-│       │   ├── analyze-text/route.ts       # Text → Claude suggestions
-│       │   ├── transcribe/route.ts         # Audio → AssemblyAI transcript
-│       │   └── web-search/route.ts         # Web search → Claude analysis
-│       ├── analytics/[id]/route.ts         # View tracking (stub)
-│       ├── consultants/route.ts            # Algolia consultant search
+│       │   ├── analyze-text/route.ts                 # Text → Claude suggestions
+│       │   ├── analyze-document/route.ts             # File upload → Claude analysis
+│       │   ├── transcribe/route.ts                   # Audio → AssemblyAI transcript
+│       │   ├── web-search/route.ts                   # Web search → Claude analysis
+│       │   ├── chat/route.ts                         # Conversational chat (calls cicero MCP tools)
+│       │   ├── search-profile/suggest/route.ts       # Suggest must-haves / nice-to-haves
+│       │   ├── scorecard/suggest/route.ts            # Suggest leadership / success-factor criteria
+│       │   ├── personas/suggest/route.ts             # Suggest 3 archetype profiles
+│       │   ├── timeline/suggest-phases/route.ts      # Suggest 12-week phase template
+│       │   ├── credentials/suggest-axes/route.ts     # Suggest credential axes
+│       │   ├── credentials/find-placements/route.ts  # Query cicero MCP for matching placements
+│       │   ├── team/rewrite-bio/route.ts             # Tighten consultant bios
+│       │   └── candidate/score/route.ts              # Score uploaded candidate against scorecard
+│       ├── analytics/[id]/route.ts                   # View tracking (stub)
+│       ├── benchmark/salary/route.ts                 # Salary benchmark lookup
+│       ├── companies/match/route.ts                  # Match company name to published Top of Minds page
+│       ├── consultants/route.ts                      # Algolia consultant search
 │       ├── deck/
-│       │   ├── route.ts                    # GET list / POST create
+│       │   ├── route.ts                              # GET list / POST create
 │       │   └── [id]/
-│       │       ├── route.ts               # GET / PUT / DELETE deck
-│       │       └── sections/
-│       │           └── [sectionType]/route.ts  # GET / PUT section data
-│       ├── publish/[id]/route.ts           # Publish to Blob (stub)
-│       └── upload/candidate/route.ts       # CV upload (stub)
+│       │       ├── route.ts                          # GET / PUT / DELETE deck
+│       │       ├── documents/route.ts                # GET / POST context documents
+│       │       ├── documents/[docId]/route.ts        # DELETE single document
+│       │       └── sections/[sectionType]/route.ts   # GET / PUT section data
+│       ├── publish/[id]/route.ts                     # Render deck → upload via cicero deployPitchdeck
+│       └── upload/candidate/route.ts                 # CV upload + parse
 │
 ├── components/
-│   ├── ai/                                 # AI input & suggestion UI (8 files)
-│   │   ├── AIPanel.tsx                     # Right-sliding AI panel container
-│   │   ├── AIInputTabs.tsx                 # Tab switcher (text/doc/voice/web)
-│   │   ├── TextInput.tsx                   # Text analysis input
-│   │   ├── DocumentUpload.tsx              # Drag-drop file upload
-│   │   ├── VoiceInput.tsx                  # Audio recording with timer
-│   │   ├── WebSearchInput.tsx              # Web search query input
-│   │   ├── SuggestionCard.tsx              # Individual suggestion with accept/dismiss
-│   │   └── SuggestionList.tsx              # Suggestion list with bulk actions
+│   ├── ai/                                 # AI input & suggestion UI
 │   ├── editor/
-│   │   ├── SectionHeader.tsx               # Section number, title, description
+│   │   ├── SectionHeader.tsx
 │   │   └── sections/                       # 11 section editors
 │   │       ├── CoverEditor.tsx
-│   │       ├── TeamEditor.tsx              # Drag-and-drop team composition
-│   │       ├── SearchProfileEditor.tsx     # AI-assisted criteria editor
+│   │       ├── TeamEditor.tsx
+│   │       ├── SearchProfileEditor.tsx
 │   │       ├── SalaryEditor.tsx
 │   │       ├── CredentialsEditor.tsx
 │   │       ├── TimelineEditor.tsx
@@ -208,91 +234,116 @@ pitchdecker_production/
 │   │       ├── ScorecardEditor.tsx
 │   │       ├── CandidatesEditor.tsx
 │   │       ├── FeeEditor.tsx
+│   │       ├── candidates/                 # CV upload + candidate detail panel
+│   │       │   ├── UploadZone.tsx
+│   │       │   └── CandidateDetailPanel.tsx
 │   │       └── team/
-│   │           ├── ConsultantPicker.tsx     # Algolia search slide-out
-│   │           └── TeamMemberCard.tsx       # Draggable team card
+│   │           ├── ConsultantPicker.tsx    # Algolia search slide-out
+│   │           └── TeamMemberCard.tsx      # Draggable team card
 │   ├── layout/
 │   │   ├── Shell.tsx                       # Main layout wrapper
 │   │   ├── TopBar.tsx                      # Deck title, save status, navigation
 │   │   ├── ProgressBar.tsx                 # Animated completion bar
-│   │   └── Sidebar.tsx                     # Section navigation (fixed left)
-│   └── ui/                                 # Shared primitives
-│       ├── Badge.tsx                        # Color-coded tag badge
-│       ├── CreateDeckDialog.tsx             # New deck modal with validation
-│       ├── EmptyState.tsx                   # Centered empty state with CTA
-│       ├── LoadingDots.tsx                  # Animated loading indicator
-│       ├── SlideOutPanel.tsx                # Right-sliding panel with backdrop
-│       └── Toast.tsx                        # Auto-dismissing notification
+│   │   └── Sidebar.tsx                     # Section nav, reads brand from @/config/brand
+│   └── ui/                                 # Shared primitives (Badge, Toast, SlideOutPanel, etc.)
+│
+├── output-template/                        # Client-facing deck renderer (firewalled from editor)
+│   ├── brand.ts                            # Top of Minds huisstijl tokens, fonts, logo SVG
+│   ├── render.ts                           # Public entry — renderDeck(deck) → { html, candidates[] }
+│   ├── index.ts                            # Barrel — only `renderDeck` and brand re-exported
+│   ├── layout.ts                           # Section dispatcher + accordion order
+│   ├── slug.ts                             # Candidate slug generator (collision-safe)
+│   ├── primitives/                         # Pure render helpers + scoped CSS blocks
+│   ├── sections/                           # 11 section renderers, one file each
+│   ├── candidate/profile.ts                # Per-candidate page renderer
+│   ├── scripts/                            # Inlined vanilla JS (accordion, progress bar, animations)
+│   └── README.md                           # Firewall rules and adding-a-section guide
+│
+├── config/
+│   └── brand.ts                            # Editor-side identity (sidebar label, page title)
+│
+├── docs/
+│   └── refactors/                          # Backlog: cicero deploy one-call, Mongo handoff, image pipeline
 │
 ├── lib/
-│   ├── types.ts                            # All TypeScript interfaces (418 lines)
+│   ├── types.ts                            # TypeScript interfaces — single source of truth for Deck shape
+│   ├── theme.ts                            # Editor design tokens (Tailwind-aligned)
 │   ├── ai-types.ts                         # AI suggestion & response types
-│   ├── theme.ts                            # Design tokens & section metadata
-│   ├── deck-storage.ts                     # In-memory deck CRUD
+│   ├── deck-storage.ts                     # MongoDB-backed deck CRUD (preserves sync helper API)
 │   ├── ai/
 │   │   ├── claude-client.ts                # Anthropic SDK wrapper
 │   │   └── prompts.ts                      # System prompts for Claude
+│   ├── db/
+│   │   └── mongodb.ts                      # Singleton Mongo client
+│   ├── mcp/
+│   │   ├── cicero-client.ts                # MCP client singleton (HTTP transport)
+│   │   ├── cicero-auth.ts                  # Auth header builder
+│   │   └── deploy-pitchdeck.ts             # Typed wrapper for cicero `deployPitchdeck` + SAS upload loop
 │   ├── hooks/
-│   │   ├── useAIPanel.ts                   # AI panel state & API calls
-│   │   └── useAudioRecorder.ts             # Microphone recording hook
-│   └── store/
-│       ├── editor-store.ts                 # Zustand: deck state + auto-save
-│       └── dashboard-store.ts              # Zustand: deck list state
+│   │   ├── useAIPanel.ts
+│   │   └── useAudioRecorder.ts
+│   ├── store/
+│   │   ├── editor-store.ts                 # Zustand: deck state + auto-save
+│   │   └── dashboard-store.ts              # Zustand: deck list state
+│   └── validators/                         # Zod schemas (kept in sync with lib/types.ts)
 │
-├── .claude/                                # Claude Code context & skills
+├── .claude/                                # Claude Code context, skills, and plans
+├── eslint.config.mjs                       # no-restricted-imports firewall between editor & output-template
 ├── package.json
 ├── next.config.ts
 ├── tsconfig.json
-├── tailwind.config.ts                      # (in initial_instruction/)
-├── start-local.sh                          # Local dev startup script
-└── start-docker.sh                         # Production startup script
+├── start-local.sh                          # Local dev startup
+└── start-docker.sh                         # Docker startup
 ```
 
 ---
 
 ## Architecture
 
+### Two design systems, one repo
+
+The editor and the published deck are visually and architecturally separate:
+
+| Surface | Design system | Lives in | Imports allowed |
+|---------|--------------|----------|-----------------|
+| Editor | Notion-inspired (white bg, Inter, blue `#2563EB`) | `app/`, `components/`, `lib/`, `config/brand.ts` | NOT `@/output-template/*` (only the barrel `@/output-template`) |
+| Output template | Top of Minds huisstijl (cream `#f5f1ea`, coranto-2, dusty-blue `#5a92b5`) | `output-template/` | ONLY `@/lib/types`. No `@/components`, no `@/lib/theme`, no Tailwind, no `next/font`. |
+
+Enforced by `no-restricted-imports` in `eslint.config.mjs`. The two brand objects (`config/brand.ts` for editor chrome, `output-template/brand.ts` for the published deck) are independent — changing one does not affect the other.
+
 ### Data Flow
 
 ```
-User Input → Component → Zustand Store → API Route → Storage
+User Input → Component → Zustand Store → API Route → MongoDB
                                 ↑                        ↓
                           Auto-save (500ms debounce)   Response
+
+Publish:
+Editor → POST /api/publish/[id] → renderDeck(deck) → cicero MCP deployPitchdeck →
+        Azure Blob (SAS upload) → returns viewer URL + PIN to consultant.
 ```
 
-1. **Components** receive section data as props and call `onChange` on edits
-2. **Editor Store** (Zustand) updates local state immediately (optimistic) and debounces a PUT request per section (500ms)
-3. **API Routes** validate input and delegate to the storage layer
-4. **Storage** currently uses an in-memory `Map<string, Deck>` — will be replaced with database persistence
+1. **Components** receive section data as props and call `onChange` on edits.
+2. **Editor Store** (Zustand) updates local state immediately (optimistic) and debounces a PUT request per section (500ms).
+3. **API Routes** validate input and delegate to the storage layer.
+4. **Storage** uses MongoDB (`lib/db/mongodb.ts` singleton + `lib/deck-storage.ts` adapter). Each deck = one document; sections are nested.
+5. **Publish** fetches the deck server-side, calls `renderDeck` (pure function in `output-template/`), and routes the resulting HTML files through `lib/mcp/deploy-pitchdeck.ts` which calls the cicero MCP and PUTs each file to the returned SAS URL.
 
 ### State Management
 
-Two Zustand stores manage application state:
+Two Zustand stores manage editor application state (the published deck has no client-side state):
 
 **`useEditorStore`** — active deck editing:
-- `deck` — full deck object (null until loaded)
-- `activeSection` — which section editor is visible
-- `saveStatus` — 'idle' | 'saving' | 'saved' | 'error'
-- `updateSection(key, data)` — optimistic update + debounced PUT
-- `getSectionStatus(id)` — computed completion status
+- `deck`, `activeSection`, `saveStatus`, `updateSection`, `getSectionStatus`
 - Per-section debounce timers prevent concurrent edits from interfering
 
 **`useDashboardStore`** — deck list:
-- `decks` — array of deck summaries
-- `fetchDecks()` / `createDeck(clientName, roleTitle)`
+- `decks`, `fetchDecks`, `createDeck(clientName, roleTitle)`
 
-### Component Architecture
+### Operational gotchas
 
-Each section editor follows a consistent pattern:
-
-```tsx
-interface SectionEditorProps {
-  data: SectionType;
-  onChange: (data: Partial<SectionType>) => void;
-}
-```
-
-The deck editor page maps the active section to its editor component via a `SECTION_EDITORS` record and renders it with `AnimatePresence` for smooth transitions.
+- **Next.js 16 + Turbopack module isolation.** Server components and API route handlers compile into separate module graphs in dev. Module-level state (e.g. an in-memory `Map`) is NOT shared between them. The Mongo-backed storage layer sidesteps this entirely; both surfaces reach the same external store.
+- **Turbopack stale dev cache.** Editing a file imported transitively by a server component sometimes does not propagate without a full dev restart. Symptom: rendered output shows old content despite the source being correct. Fix: kill the dev process, `rm -rf .next`, restart `npm run dev`.
 
 ---
 
@@ -302,17 +353,17 @@ Each pitch deck contains 11 sections, presented in a fixed order:
 
 | # | Section | Type | Description | Completion Rule |
 |---|---------|------|-------------|-----------------|
-| 1 | **Cover** | Simple form | Client name, role title, intro paragraph, hero image | Both client name and role title filled |
+| 1 | **Cover** | Simple form | Client name, role title, tagline, intro paragraph, hero/banner/logo image | Both client name and role title filled |
 | 2 | **Team** | Database picker | Lead team + network members from Algolia consultant index | At least 1 lead team member |
-| 3 | **Search Profile** | Structured input + AI | Must-have and nice-to-have criteria with weights (1-5) | At least 1 must-have criterion |
+| 3 | **Search Profile** | Structured input + AI | Must-have and nice-to-have criteria with weights (1-5) + personality profile | At least 1 must-have criterion |
 | 4 | **Salary** | Simple form | Base range, bonus, LTIP, benefits, other compensation | Base salary low > 0 |
-| 5 | **Credentials** | Database picker | Track record axes with relevant placements | At least 1 axis with placements |
-| 6 | **Timeline** | Template-based | Process phases with durations and milestones | At least 1 phase |
-| 7 | **Assessment** | Template-based | Evaluation methods (behavioral, case study, psychometric, etc.) | At least 1 method enabled |
-| 8 | **Personas** | Structured input | Candidate archetypes with characteristics | At least 1 archetype |
-| 9 | **Scorecard** | Structured input | Weighted evaluation criteria across 4 categories | At least 1 criterion in any category |
-| 10 | **Candidates** | Upload + enrichment | Sample shortlist with scores and rankings | At least 1 candidate |
-| 11 | **Fee Proposal** | Simple form | Fee structure, percentage, milestones, terms | Fee percentage > 0 |
+| 5 | **Credentials** | Database picker | Track-record axes; placements queried from cicero MCP | At least 1 axis with placements |
+| 6 | **Timeline** | Template-based | Process phases (active + holiday) with durations and confidentiality note | At least 1 phase |
+| 7 | **Assessment** | Template-based | Provider-agnostic pillars (Hogan preset), assessor card, optional sample report + MT add-on | Assessor name + at least 1 pillar + process description |
+| 8 | **Personas** | Structured input + AI | 3 archetypes with pool-size badges (narrow/moderate/strong) | At least 1 archetype |
+| 9 | **Scorecard** | Structured input + AI | Weighted criteria across 4 categories (Must-Haves / Nice-to-Haves / Leadership / Success Factors) | At least 1 criterion in any category |
+| 10 | **Candidates** | Upload + enrichment | Sample shortlist with scores, rankings, strengths, risks; renders to per-candidate pages in the published deck | At least 1 candidate |
+| 11 | **Fee Proposal** | Simple form | Flat fee + currency + instalments[] + guarantee months + optional add-ons | `fee.amount > 0` |
 
 ---
 
@@ -320,20 +371,24 @@ Each pitch deck contains 11 sections, presented in a fixed order:
 
 ### How It Works
 
-The AI pipeline uses **Claude** (Anthropic) to analyze consultant-provided content and extract structured suggestions for the Search Profile section.
+The AI pipeline uses **Claude** (Anthropic) to analyze consultant-provided content and extract structured suggestions across multiple sections. For domain queries (placements, company matches), the Claude chat tool calls the cicero MCP server.
 
 ```
-Input (text/doc/voice/web) → API Route → Claude → Structured Suggestions → User Review → Section Data
+Input (text/doc/voice/web/section-context) → API Route → Claude (+ MCP tools) → Structured Suggestions → User Review → Section Data
 ```
 
-### Input Modes
+### Per-section AI surfaces
 
-| Mode | Route | Service | Flow |
-|------|-------|---------|------|
-| Text | `/api/ai/analyze-text` | Claude (claude-sonnet-4-6) | Text → system prompt + tool use → suggestions |
-| Document | `/api/ai/analyze-document` | pdf-parse / mammoth + Claude | File → text extraction → analysis |
-| Voice | `/api/ai/transcribe` | AssemblyAI → Claude | Audio → transcript → analysis |
-| Web Search | `/api/ai/web-search` | Claude (web_search tool) | Query → web search → analysis |
+| Section | Endpoint | Behaviour |
+|---------|----------|-----------|
+| Search Profile | `/api/ai/search-profile/suggest`, `/api/ai/analyze-text`, `/api/ai/analyze-document`, `/api/ai/transcribe`, `/api/ai/web-search` | Multi-modal suggest (text/document/voice/web). Returns weighted criteria with reasoning. |
+| Scorecard | `/api/ai/scorecard/suggest` | Suggest leadership and success-factor criteria from the existing search profile. |
+| Personas | `/api/ai/personas/suggest` | Generate 3 archetype profiles with pool sizes. |
+| Timeline | `/api/ai/timeline/suggest-phases` | Propose a 12-week phase template tailored to the mandate. |
+| Credentials | `/api/ai/credentials/suggest-axes`, `/api/ai/credentials/find-placements` | Suggest credential axes; query cicero MCP for matching placements. |
+| Team | `/api/ai/team/rewrite-bio` | Tighten consultant bios without losing facts. |
+| Candidates | `/api/ai/candidate/score`, `/api/upload/candidate` | Parse uploaded CV → score against scorecard → return enriched candidate object. |
+| Cross-section | `/api/ai/chat` | Conversational chat with full cicero MCP toolset; can search placements, candidates, jobs across the firm. |
 
 ### Suggestion Structure
 
@@ -341,21 +396,74 @@ Each AI suggestion includes:
 
 ```typescript
 interface AISuggestion {
-  id: string;              // UUID
-  text: string;            // The criterion text
-  weight: 1 | 2 | 3 | 4 | 5;  // Importance (5=critical, 1=minor)
+  id: string;
+  text: string;
+  weight: 1 | 2 | 3 | 4 | 5;
   category: 'mustHave' | 'niceToHave';
-  reasoning?: string;      // Why this was suggested
+  reasoning?: string;
   status: 'pending' | 'accepted' | 'dismissed';
 }
 ```
 
 ### Claude Configuration
 
-- **Model:** claude-sonnet-4-6 (text/web), claude-sonnet-4-20250514 (images)
-- **Tool:** `provide_suggestions` with forced tool choice for structured output
-- **Context-aware prompts:** Include client name, role title, existing criteria (for deduplication)
-- **Web search:** Uses `web_search_20250305` tool (max 5 searches per request)
+- **Model:** `claude-sonnet-4-6` (text/web/structured tool use); image-capable model for document analysis
+- **Tool patterns:** `provide_suggestions` with forced tool choice for structured output; cicero MCP toolset auto-loaded for chat
+- **Context-aware prompts:** Include client name, role title, and existing section data for deduplication
+- **Web search:** `web_search_20250305` tool (max 5 searches per request)
+
+---
+
+## Output Template
+
+`/output-template/` is a separate module that renders a typed `Deck` object into a self-contained HTML document plus per-candidate HTML pages. It has its own brand object, its own CSS, and its own scripts. Nothing from the editor's design system crosses the boundary.
+
+### Public API
+
+```ts
+import { renderDeck } from '@/output-template'
+
+const result = renderDeck(deck, { mode: 'publish' }) // or 'preview'
+// result.html                     ← index.html string
+// result.candidates[i].slug       ← URL-safe slug
+// result.candidates[i].html       ← candidates/{slug}.html string
+```
+
+`renderDeck` is a pure, synchronous function. It does not fetch, upload, or touch the filesystem.
+
+### Modes
+
+- **`preview`** (default): every section is rendered, even empty ones — they show a placeholder. Per-section render errors are caught and rendered as visible error blocks. Used by `/app/deck/[id]/preview/page.tsx`.
+- **`publish`**: empty sections are omitted entirely and section-level errors propagate out.
+
+### Multi-tenant
+
+Deliberately not built. When a second recruiter is onboarded, fork `/output-template/` to `/output-templates/{tenant}/` rather than introducing a generic brand/template engine speculatively. See `output-template/README.md` for the migration sketch.
+
+---
+
+## Publishing & Deployment
+
+### Publish flow
+
+1. Consultant clicks Publish → `POST /api/publish/[id]`.
+2. Route fetches the deck from MongoDB.
+3. Validates: every section's `sectionStatuses[key] !== 'empty'`. Returns `400` with `emptySections[]` if not.
+4. Calls `renderDeck(deck, { mode: 'publish' })` → `{ html, candidates[] }`.
+5. Calls `publishDeckArtifacts()` which:
+   - invokes the cicero MCP `deployPitchdeck` tool with the client name,
+   - receives `{ viewer_url, pin, upload_url, sas_token, expires_in_days }`,
+   - PUTs `index.html` + `candidates/{slug}.html` to the SAS URL with `x-ms-blob-type: BlockBlob`.
+6. Returns `{ viewerUrl, pin, expiresInDays }` to the consultant.
+
+The viewer URL points at an Azure Function (`/view/{token}`) that serves the HTML behind the PIN. The Function lives in the upstream `cicero_mcp` infrastructure.
+
+### Backlog
+
+See `docs/refactors/`:
+- **`cicero-mcp-deploy-one-call.md`** — collapse the two-step (call MCP, then PUT files) into a single tool call where MCP handles the upload server-side.
+- **`image-upload-pipeline.md`** — the upload UI for hero/banner/logo/team-non-Algolia/candidate photos. Today these render as initials / gradient placeholders.
+- **`mongodb-deck-storage.md`** — handoff doc for the original Mongo migration (already executed; kept for reference).
 
 ---
 
@@ -363,67 +471,84 @@ interface AISuggestion {
 
 ### Deck Management
 
-| Method | Endpoint | Description | Request | Response |
-|--------|----------|-------------|---------|----------|
-| GET | `/api/deck` | List all decks | — | `{ decks: DeckSummary[] }` |
-| POST | `/api/deck` | Create deck | `{ clientName, roleTitle }` | `{ id, deck: Deck }` |
-| GET | `/api/deck/[id]` | Get full deck | — | `{ deck: Deck }` |
-| PUT | `/api/deck/[id]` | Update deck metadata | Partial `Deck` | `{ success: true }` |
-| DELETE | `/api/deck/[id]` | Delete deck | — | `{ success: true }` |
-| GET | `/api/deck/[id]/sections/[type]` | Get section | — | `{ section: SectionData }` |
-| PUT | `/api/deck/[id]/sections/[type]` | Update section | Partial section | `{ success: true }` |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/deck` | List all decks |
+| POST | `/api/deck` | Create deck (`{ clientName, roleTitle }`) |
+| GET | `/api/deck/[id]` | Get full deck |
+| PUT | `/api/deck/[id]` | Update deck metadata |
+| DELETE | `/api/deck/[id]` | Delete deck |
+| GET | `/api/deck/[id]/sections/[type]` | Get section |
+| PUT | `/api/deck/[id]/sections/[type]` | Update section |
+| GET | `/api/deck/[id]/documents` | List context documents |
+| POST | `/api/deck/[id]/documents` | Upload context document |
+| DELETE | `/api/deck/[id]/documents/[docId]` | Remove a context document |
 
 ### AI & Analysis
 
-| Method | Endpoint | Description | Request | Response |
-|--------|----------|-------------|---------|----------|
-| POST | `/api/ai/analyze-text` | Analyze text | `{ text, context }` | `AIAnalysisResponse` |
-| POST | `/api/ai/analyze-document` | Analyze file | FormData (file + context) | `AIAnalysisResponse` |
-| POST | `/api/ai/transcribe` | Transcribe audio | FormData (audio) | `{ transcript }` |
-| POST | `/api/ai/web-search` | Web search + analysis | `{ query, context }` | `AIAnalysisResponse` |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/ai/analyze-text` | Text → Claude suggestions |
+| POST | `/api/ai/analyze-document` | File upload → Claude suggestions |
+| POST | `/api/ai/transcribe` | Audio → AssemblyAI transcript |
+| POST | `/api/ai/web-search` | Web search → Claude suggestions |
+| POST | `/api/ai/chat` | Conversational chat (cicero MCP tools available) |
+| POST | `/api/ai/search-profile/suggest` | Suggest must-haves / nice-to-haves |
+| POST | `/api/ai/scorecard/suggest` | Suggest leadership / success-factor criteria |
+| POST | `/api/ai/personas/suggest` | Suggest 3 archetype profiles |
+| POST | `/api/ai/timeline/suggest-phases` | Suggest 12-week phase template |
+| POST | `/api/ai/credentials/suggest-axes` | Suggest credential axes |
+| POST | `/api/ai/credentials/find-placements` | Query cicero MCP for matching placements |
+| POST | `/api/ai/team/rewrite-bio` | Tighten consultant bio |
+| POST | `/api/ai/candidate/score` | Score candidate against scorecard |
 
 ### Other
 
 | Method | Endpoint | Description | Status |
 |--------|----------|-------------|--------|
-| GET | `/api/consultants?q=...` | Search Algolia for consultants | Implemented |
-| GET | `/api/analytics/[id]` | View analytics | Stub (empty) |
-| POST | `/api/publish/[id]` | Publish deck | Stub (501) |
-| POST | `/api/upload/candidate` | Upload CV/LinkedIn | Stub (501) |
+| GET | `/api/consultants?q=...` | Search Algolia for consultants | Live |
+| GET | `/api/companies/match?q=...` | Match company name to published Top of Minds page | Live |
+| GET | `/api/benchmark/salary?...` | Salary benchmark lookup | Live |
+| POST | `/api/upload/candidate` | Upload + parse CV | Live |
+| POST | `/api/publish/[id]` | Render deck → upload via cicero deployPitchdeck | Live |
+| GET | `/api/analytics/[id]` | View analytics | Stub |
 
 ---
 
 ## Data Layer
 
-### Current: In-Memory Storage
+### MongoDB-backed storage
 
-All deck data is stored in a JavaScript `Map<string, Deck>` in `lib/deck-storage.ts`. Data is **ephemeral** — it is lost when the server restarts. This is intentional for Phase 1 development.
+Decks live in MongoDB (collection `pitchdecker`, one document per deck). The document mirrors the `Deck` interface verbatim, with `_id` duplicating `Deck.id` (UUID).
 
-The storage layer provides:
+`lib/deck-storage.ts` exposes the same API surface as the original in-memory layer:
+
 - `getAll()` — returns deck summaries with computed completion counts
-- `get(id)` / `create(id, clientName, roleTitle)` / `update(id, partial)` / `delete(id)`
-- `getSection(deckId, sectionKey)` / `updateSection(deckId, sectionKey, data)` — section-level CRUD with merge semantics
-- `isSectionComplete(deck, sectionId)` — per-section completion rules
-- `computeCompletedSections(deck)` — total complete count (0-11)
+- `get(id)`, `create(id, clientName, roleTitle)`, `update(id, partial)`, `delete(id)`
+- `getSection(deckId, sectionKey)`, `updateSection(deckId, sectionKey, data)` — section-level CRUD with merge semantics
+- `isSectionComplete(deck, sectionId)`, `computeCompletedSections(deck)` — pure helpers, sync
 
-### Planned: Persistent Databases
+The Mongo client itself is a singleton in `lib/db/mongodb.ts` (lazy connect, reused across requests).
 
-Environment variables are already configured for:
-- **PostgreSQL (Azure):** Three-tier database (bronze, silver, gold) on `yojimbo.postgres.database.azure.com`
-- **MongoDB:** `aimee-prod.stjbrda.mongodb.net` cluster
-- **Azure Blob Storage:** Account `valefor` for published deck output and file uploads
+### Why Mongo (and not the in-memory `Map`)
 
-These will be connected in Phase 2.
+Two reasons:
+1. **Persistence across dev restarts.** In-memory storage was wiping every code change.
+2. **Next.js + Turbopack module isolation.** Server components and API route handlers got separate `Map` instances in dev — a deck POSTed to one was invisible to the other. External storage sidesteps this entirely.
+
+### Postgres + Blob
+
+Postgres clients are wired (`pg`) for future bronze/silver/gold tier reads. Azure Blob Storage is used by the publish flow indirectly (via cicero MCP) — the editor itself does not write to blob.
 
 ---
 
 ## Design System
 
-### Visual Direction
+### Editor visual direction
 
 Clean, modern, Notion-meets-Linear aesthetic. White background, cool greys, blue accent. The tool should feel calm, spacious, and respectful of the consultant's time.
 
-### Colors
+### Editor colors
 
 | Token | Value | Usage |
 |-------|-------|-------|
@@ -438,16 +563,29 @@ Clean, modern, Notion-meets-Linear aesthetic. White background, cool greys, blue
 
 **Functional colors** (8 pairs for tags and categories): sand, sage, rose, lilac, slate, sienna, teal, copper.
 
-### Typography
+### Editor typography
 
 - **Font:** Inter (geometric sans-serif, loaded via `next/font`)
 - **Headings:** Semibold/bold
 - **Body:** Regular weight
 - **Sizes:** 12px (xs) through 48px (4xl)
 
+### Output-template visual direction
+
+Authoritative tokens live in `output-template/brand.ts` — these are the Top of Minds huisstijl, completely separate from the editor's design system:
+
+- Background: cream `#f5f1ea`
+- Primary text: near-black `#111111`
+- Accent: dusty blue `#5a92b5`
+- Sand: `#c4a87a`
+- Fonts: coranto-2 (Adobe Typekit, headings + body); Barlow (UI labels); JetBrains Mono (numbers, scores)
+- Cards use `border-radius` 10–12px; badges 3–6px; circles 50%
+
+The `.claude/skills/deck-template/huisstijl-reference.md` document is historical reference only — where it disagrees with the demo HTML or `output-template/brand.ts`, the latter wins.
+
 ### Animation
 
-All animations use Framer Motion with consistent curves:
+Editor uses Framer Motion with consistent curves:
 
 | Curve | Values | Usage |
 |-------|--------|-------|
@@ -461,6 +599,8 @@ All animations use Framer Motion with consistent curves:
 | Layout | 200ms | Section transitions |
 | Overlay | 300ms | Modals, slide-outs |
 
+The output template uses vanilla CSS keyframes + IntersectionObserver — no Framer Motion. Lives in `output-template/scripts/`.
+
 ### Key UI Patterns
 
 - **Auto-save:** No save button. Status indicator shows "Saved" / "Saving..." / error
@@ -473,48 +613,52 @@ All animations use Framer Motion with consistent curves:
 
 ## External Services
 
-| Service | Purpose | SDK / Integration | Status |
-|---------|---------|-------------------|--------|
-| **Anthropic Claude** | Text analysis, web search, image analysis | `@anthropic-ai/sdk` | Active |
-| **AssemblyAI** | Audio transcription | `assemblyai` | Active |
-| **Algolia** | Consultant search index | REST API (fetch) | Active |
-| **Azure PostgreSQL** | Persistent data storage (3 DBs) | Not yet connected | Planned |
-| **MongoDB** | Document storage | Not yet connected | Planned |
-| **Azure Blob Storage** | Published deck hosting, file uploads | Not yet connected | Planned |
+| Service | Purpose | Integration | Status |
+|---------|---------|-------------|--------|
+| **Anthropic Claude** | Text analysis, web search, image analysis, chat | `@anthropic-ai/sdk` | Live |
+| **AssemblyAI** | Audio transcription | `assemblyai` | Live |
+| **Algolia** | Consultant search index, company match | REST API (fetch) | Live |
+| **MongoDB** | Persistent deck storage | `mongodb` driver | Live |
+| **Cicero MCP** | Placement queries, candidate enrichment, `deployPitchdeck` | `@modelcontextprotocol/sdk` over HTTP | Live |
+| **Azure Blob Storage** | Published deck hosting | Indirect (via cicero `deployPitchdeck` → SAS upload) | Live |
+| **Azure Function viewer** | Serves published HTML behind PIN at `/view/{token}` | Lives in cicero_mcp infrastructure | Live |
+| **Azure PostgreSQL** | Bronze/silver/gold data tier reads | `pg` (wired, not yet used by app) | Planned |
 | **Bullhorn** | ATS / CRM integration | Not yet connected | Planned |
-| **Getty Images** | Stock photography | Not yet connected | Planned |
+| **Getty Images** | Stock photography for hero/banner | Not yet connected | Planned (depends on image upload pipeline) |
 
 ---
 
 ## Roadmap
 
-### Phase 1 — Editor UI & AI (Current)
+### Done
 
-- [x] Dashboard with deck list and creation
-- [x] Sidebar + content area editor layout
-- [x] 11 section editor components
-- [x] Auto-save with debounced persistence
-- [x] AI-assisted search profile editing (text, document, voice, web search)
-- [x] Consultant search via Algolia
-- [x] Drag-and-drop team composition
-- [x] Design system and animation framework
-- [ ] Complete interactivity for all section editors (some are read-only)
+- Dashboard with deck list and creation
+- Sidebar + content area editor layout
+- All 11 section editors functional (most with AI assist)
+- Auto-save with debounced persistence
+- AI suggest endpoints across Search Profile, Scorecard, Personas, Timeline, Credentials, Team, Candidates
+- Cross-section conversational chat with cicero MCP tools
+- Algolia consultant search and company match
+- MongoDB persistence for decks
+- Output template (`/output-template/`) — full huisstijl render of all 11 sections + per-candidate pages
+- Preview iframe with sandbox isolation
+- Publish workflow: render → cicero MCP `deployPitchdeck` → SAS upload → viewer URL + PIN
+- Editor / output-template firewall via ESLint
+- Editor brand config (`config/brand.ts`) decoupled from output brand
 
-### Phase 2 — Backend Integration
+### In flight / backlog
 
-- [ ] Connect PostgreSQL databases (bronze/silver/gold)
-- [ ] Connect MongoDB for document storage
-- [ ] Azure Blob Storage for file uploads
-- [ ] Bullhorn CRM integration for candidate data
-- [ ] Candidate CV/LinkedIn upload and parsing
-- [ ] View analytics tracking
+See `docs/refactors/`:
+- **Image upload pipeline** — UI for hero / banner / client logo / team (non-Algolia) / candidate photos. Today these render as initials or gradient placeholders.
+- **Cicero MCP deploy refactor** — collapse the two-step contract (call MCP, then PUT files) into one server-side call.
+- **Editor UI for new schema fields** — `AssessmentEditor` doesn't yet expose `sampleReport` / `mtAssessment` / `providerName` UI; `CandidatesEditor` doesn't yet have UI for `strengths` / `risks`. The fields exist in the schema and render correctly when populated via API.
 
-### Phase 3 — Client-Facing Output
+### Not yet planned
 
-- [ ] Pitch deck HTML template (Top of Minds brand)
-- [ ] Publish workflow (generate + upload to Blob + CDN)
-- [ ] Preview mode in editor
-- [ ] Shareable link generation
+- Postgres data tier integration (bronze/silver/gold reads)
+- Bullhorn CRM
+- View analytics tracking
+- Multi-tenant — deferred until a second recruiter exists; the firewall and brand-config split keep that path open.
 
 ---
 
@@ -523,20 +667,22 @@ All animations use Framer Motion with consistent curves:
 ### Scripts
 
 ```bash
-npm run dev      # Start dev server (Next.js with hot reload)
+npm run dev      # Start dev server (Next.js with Turbopack hot reload)
 npm run build    # Production build
 npm run start    # Start production server
-npm run lint     # ESLint with Next.js + TypeScript rules
+npm run lint     # ESLint with Next.js + TypeScript rules + firewall rules
 ```
 
 ### Key Conventions
 
-- **No mock data** — API routes return empty arrays/objects when no data exists; UI shows proper empty states
-- **No UI libraries** — every component is custom-built
-- **Strict TypeScript** — no `any` types allowed
-- **All colors via theme** — never hardcoded hex values
-- **Desktop-first responsive** — mobile support from the start
-- **Auto-save everything** — no manual save buttons anywhere
+- **Two design systems, one repo.** Editor (Tailwind + Inter + Notion palette) and output template (inline CSS + coranto-2 + huisstijl) share no styling. ESLint enforces.
+- **No mock data in editor surfaces.** API routes return empty arrays/objects when no data exists; UI shows proper empty states. (The `/output-template/` renders placeholders for missing images, but never fakes content.)
+- **No UI libraries** — every editor component is custom-built; the output template is dependency-free HTML.
+- **Strict TypeScript** — no `any` types allowed.
+- **All editor colors via theme** — never hardcoded hex values in editor files. The output template owns its own palette in `output-template/brand.ts`.
+- **Desktop-first responsive** — mobile support from the start.
+- **Auto-save everything** — no manual save buttons anywhere.
+- **Cross-tenant abstractions are deliberately deferred** until a second client exists.
 
 ### Path Aliases
 
@@ -545,6 +691,8 @@ npm run lint     # ESLint with Next.js + TypeScript rules
 ```typescript
 import { useEditorStore } from '@/lib/store/editor-store';
 import { Badge } from '@/components/ui/Badge';
+import { renderDeck } from '@/output-template'; // barrel only — internal paths are firewalled
+import { editorBrand } from '@/config/brand';
 ```
 
 ---

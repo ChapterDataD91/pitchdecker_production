@@ -9,6 +9,7 @@
 
 import { motion } from 'framer-motion'
 import type { SectionStatus } from '@/lib/types'
+import { editorBrand } from '@/config/brand'
 import ProgressBar from './ProgressBar'
 
 interface SidebarSection {
@@ -75,7 +76,7 @@ export default function Sidebar({
       {/* Brand label */}
       <div className="px-5 pt-5 pb-3">
         <span className="text-[10px] font-bold uppercase tracking-[2.5px] text-text-secondary">
-          Top of Minds
+          {editorBrand.name}
         </span>
       </div>
 
