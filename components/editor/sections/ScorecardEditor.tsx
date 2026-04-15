@@ -5,6 +5,7 @@ import { v4 as uuid } from 'uuid'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { ScorecardSection, ScorecardCriterion, Weight } from '@/lib/types'
 import { useEditorStore } from '@/lib/store/editor-store'
+import { useAIStore } from '@/lib/store/ai-store'
 import LoadingDots from '@/components/ui/LoadingDots'
 import WeightSelector from '@/components/ui/WeightSelector'
 
@@ -101,6 +102,7 @@ export default function ScorecardEditor({
 }: ScorecardEditorProps) {
   const data = normalize(rawData)
   const deck = useEditorStore((s) => s.deck)
+  const deckDocuments = useAIStore((s) => s.deckDocuments)
 
   const previousRef = useRef<ScorecardSection | null>(null)
   const [appliedAction, setAppliedAction] = useState<'imported' | 'ai' | null>(null)
@@ -202,6 +204,10 @@ export default function ScorecardEditor({
             niceToHaves: searchProfile.niceToHaves.map((c) => c.text),
             personalityIntro: searchProfile.personalityProfile.intro || undefined,
             personalityTraits: searchProfile.personalityProfile.traits,
+            uploadedDocuments: deckDocuments.map((d) => ({
+              fileName: d.fileName,
+              extractedText: d.extractedText,
+            })),
           },
         }),
       })

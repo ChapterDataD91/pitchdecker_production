@@ -239,6 +239,16 @@ export default function AIPanel({ context, onToolsAccept, onToolsAcceptAll }: AI
   const closePanel = useAIStore((s) => s.closePanel)
   const setPanelMode = useAIStore((s) => s.setPanelMode)
 
+  // Escape closes the panel from anywhere — matches SlideOutPanel behaviour.
+  useEffect(() => {
+    if (!panelOpen) return
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closePanel()
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [panelOpen, closePanel])
+
   return (
     <AnimatePresence>
       {panelOpen && (

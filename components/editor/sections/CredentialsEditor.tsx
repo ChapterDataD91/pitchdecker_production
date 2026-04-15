@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react'
 import { v4 as uuid } from 'uuid'
 import type { CredentialsSection, CredentialAxis, Placement } from '@/lib/types'
 import { useEditorStore } from '@/lib/store/editor-store'
+import { useAIStore } from '@/lib/store/ai-store'
 import LoadingDots from '@/components/ui/LoadingDots'
 import ClientList from '@/components/editor/sections/credentials/ClientList'
 import type { ClientPlacement } from '@/app/api/ai/credentials/find-placements/route'
@@ -31,6 +32,7 @@ interface DraftAxis {
 
 export default function CredentialsEditor({ data, onChange }: CredentialsEditorProps) {
   const deck = useEditorStore((s) => s.deck)
+  const deckDocuments = useAIStore((s) => s.deckDocuments)
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [suggestError, setSuggestError] = useState<string | null>(null)
 
@@ -77,6 +79,10 @@ export default function CredentialsEditor({ data, onChange }: CredentialsEditorP
             clientName: cover.clientName || deck.clientName,
             roleTitle: cover.roleTitle || deck.roleTitle,
             coverIntro: cover.introParagraph || undefined,
+            uploadedDocuments: deckDocuments.map((d) => ({
+              fileName: d.fileName,
+              extractedText: d.extractedText,
+            })),
           },
         }),
       })

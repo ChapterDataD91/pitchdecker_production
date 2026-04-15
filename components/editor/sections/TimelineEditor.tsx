@@ -5,6 +5,7 @@ import { v4 as uuid } from 'uuid'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { TimelineSection, TimelinePhase } from '@/lib/types'
 import { useEditorStore } from '@/lib/store/editor-store'
+import { useAIStore } from '@/lib/store/ai-store'
 import LoadingDots from '@/components/ui/LoadingDots'
 
 interface TimelineEditorProps {
@@ -84,6 +85,7 @@ function getWeekRange(phases: TimelinePhase[], index: number): string {
 
 export default function TimelineEditor({ data, onChange }: TimelineEditorProps) {
   const deck = useEditorStore((s) => s.deck)
+  const deckDocuments = useAIStore((s) => s.deckDocuments)
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [suggestError, setSuggestError] = useState<string | null>(null)
 
@@ -197,6 +199,10 @@ export default function TimelineEditor({ data, onChange }: TimelineEditorProps) 
             clientName: cover.clientName || deck.clientName,
             roleTitle: cover.roleTitle || deck.roleTitle,
             coverIntro: cover.introParagraph || undefined,
+            uploadedDocuments: deckDocuments.map((d) => ({
+              fileName: d.fileName,
+              extractedText: d.extractedText,
+            })),
           },
         }),
       })

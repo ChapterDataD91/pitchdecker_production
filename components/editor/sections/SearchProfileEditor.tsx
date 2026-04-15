@@ -5,6 +5,7 @@ import { v4 } from 'uuid'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { SearchProfileSection, Criterion, Weight } from '@/lib/types'
 import { useEditorStore } from '@/lib/store/editor-store'
+import { useAIStore } from '@/lib/store/ai-store'
 import LoadingDots from '@/components/ui/LoadingDots'
 import WeightSelector from '@/components/ui/WeightSelector'
 
@@ -80,6 +81,7 @@ export default function SearchProfileEditor({
 }: SearchProfileEditorProps) {
   const data = normalize(rawData)
   const deck = useEditorStore((s) => s.deck)
+  const deckDocuments = useAIStore((s) => s.deckDocuments)
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [suggestError, setSuggestError] = useState<string | null>(null)
   const previousRef = useRef<SearchProfileSection | null>(null)
@@ -106,6 +108,10 @@ export default function SearchProfileEditor({
             clientName: cover.clientName || deck.clientName,
             roleTitle: cover.roleTitle || deck.roleTitle,
             coverIntro: cover.introParagraph || undefined,
+            uploadedDocuments: deckDocuments.map((d) => ({
+              fileName: d.fileName,
+              extractedText: d.extractedText,
+            })),
           },
         }),
       })

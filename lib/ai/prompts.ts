@@ -1,5 +1,9 @@
 import type { AISectionContext, ChatContext } from '@/lib/ai-types'
 import type { CredentialAxis } from '@/lib/types'
+import {
+  formatReferenceDocs,
+  type ReferenceDoc,
+} from '@/lib/ai/reference-docs'
 
 // ---------------------------------------------------------------------------
 // Credentials context types (used by credentials-specific prompts only)
@@ -10,6 +14,7 @@ export interface CredentialsContext {
   roleTitle: string
   coverIntro?: string
   searchProfileSummary?: string
+  uploadedDocuments?: ReferenceDoc[]
 }
 
 export interface CredentialsSourcingContext extends CredentialsContext {
@@ -305,6 +310,7 @@ export interface TimelineContext {
   roleTitle: string
   coverIntro?: string
   searchProfileSummary?: string
+  uploadedDocuments?: ReferenceDoc[]
 }
 
 export function getTimelineSystemPrompt(context: TimelineContext): string {
@@ -346,7 +352,7 @@ Each phase needs:
 - Milestones should be concrete deliverables the client can expect
 - Write in a professional, consultative tone
 
-Use the suggest_phases tool to return your answer.`
+Use the suggest_phases tool to return your answer.${formatReferenceDocs(context.uploadedDocuments)}`
 }
 
 // ---------------------------------------------------------------------------
@@ -361,6 +367,7 @@ export interface ScorecardContext {
   niceToHaves?: string[]
   personalityIntro?: string
   personalityTraits?: string[]
+  uploadedDocuments?: ReferenceDoc[]
 }
 
 export function getScorecardSystemPrompt(context: ScorecardContext): string {
@@ -407,7 +414,7 @@ Each criterion has:
 - Weights should vary meaningfully — if everything is 5, you're not signalling anything. The average weight in this section should be around 3.5.
 - Exercise consultant judgement — these are criteria you'd actually defend on a scorecard.
 
-Use the suggest_scorecard tool to return your answer.`
+Use the suggest_scorecard tool to return your answer.${formatReferenceDocs(context.uploadedDocuments)}`
 }
 
 // ---------------------------------------------------------------------------
@@ -418,6 +425,7 @@ export interface SearchProfileStarterContext {
   clientName: string
   roleTitle: string
   coverIntro?: string
+  uploadedDocuments?: ReferenceDoc[]
 }
 
 export function getSearchProfileStarterSystemPrompt(
@@ -456,7 +464,7 @@ Generate:
 - Reference the client and role naturally when it sharpens a criterion — but do not fabricate specifics about the client if you don't know them. When uncertain, write at a sector/scale level rather than inventing facts.
 - Exercise consultant judgement: propose criteria you'd actually defend in a pitch. This is a starter, so prioritise clarity and signal over completeness.
 
-Use the suggest_search_profile tool to return your answer.`
+Use the suggest_search_profile tool to return your answer.${formatReferenceDocs(context.uploadedDocuments)}`
 }
 
 // ---------------------------------------------------------------------------
@@ -474,6 +482,7 @@ export interface PersonasContext {
   credentialAxes?: Array<{ name: string; description?: string }>
   consultantNotes?: string
   keep?: Array<{ title: string; description: string }>
+  uploadedDocuments?: ReferenceDoc[]
 }
 
 export function getPersonasSystemPrompt(context: PersonasContext): string {
@@ -552,7 +561,7 @@ Each persona has:
 - Write in the firm's voice: professional, consultative, confident. No hedging, no marketing fluff.
 - Do not fabricate things the consultant hasn't said — but you may propose sourcing pools that logically follow from the profile, that is your expertise.
 
-Use the suggest_personas tool to return your answer.`
+Use the suggest_personas tool to return your answer.${formatReferenceDocs(context.uploadedDocuments)}`
 }
 
 // ---------------------------------------------------------------------------
@@ -591,7 +600,7 @@ Each axis needs:
 - The intro paragraph should feel natural and persuasive, not formulaic
 - Together, the three axes should paint a picture of a firm that is uniquely positioned to fill this specific role
 
-Use the suggest_axes tool to return your answer.`
+Use the suggest_axes tool to return your answer.${formatReferenceDocs(context.uploadedDocuments)}`
 }
 
 // ---------------------------------------------------------------------------

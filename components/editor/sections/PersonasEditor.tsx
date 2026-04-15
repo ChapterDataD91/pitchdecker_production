@@ -5,6 +5,7 @@ import { v4 as uuid } from 'uuid'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Persona, PersonaPoolSize, PersonasSection } from '@/lib/types'
 import { useEditorStore } from '@/lib/store/editor-store'
+import { useAIStore } from '@/lib/store/ai-store'
 import LoadingDots from '@/components/ui/LoadingDots'
 
 interface PersonasEditorProps {
@@ -69,6 +70,7 @@ function poolRank(size: PersonaPoolSize): number {
 
 export default function PersonasEditor({ data, onChange }: PersonasEditorProps) {
   const deck = useEditorStore((s) => s.deck)
+  const deckDocuments = useAIStore((s) => s.deckDocuments)
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [suggestError, setSuggestError] = useState<string | null>(null)
 
@@ -161,6 +163,10 @@ export default function PersonasEditor({ data, onChange }: PersonasEditorProps) 
               name: a.name,
               description: a.description,
             })),
+            uploadedDocuments: deckDocuments.map((d) => ({
+              fileName: d.fileName,
+              extractedText: d.extractedText,
+            })),
           },
         }),
       })
@@ -238,6 +244,10 @@ export default function PersonasEditor({ data, onChange }: PersonasEditorProps) 
               description: a.description,
             })),
             keep,
+            uploadedDocuments: deckDocuments.map((d) => ({
+              fileName: d.fileName,
+              extractedText: d.extractedText,
+            })),
           },
         }),
       })

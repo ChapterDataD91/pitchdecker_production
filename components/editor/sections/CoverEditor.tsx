@@ -1,14 +1,51 @@
 'use client'
 
+import { useRef, useState } from 'react'
 import type { CoverSection } from '@/lib/types'
+import { useAIStore } from '@/lib/store/ai-store'
+import { useEditorStore } from '@/lib/store/editor-store'
+import LoadingDots from '@/components/ui/LoadingDots'
 
 interface CoverEditorProps {
   data: CoverSection
   onChange: (data: CoverSection) => void
 }
 
+const ACCEPTED = '.pdf,.docx,.txt'
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export default function CoverEditor({ data, onChange }: CoverEditorProps) {
   void onChange
+
+  const deckId = useEditorStore((s) => s.deck?.id ?? null)
+  const deckDocuments = useAIStore((s) => s.deckDocuments)
+  const uploadDocument = useAIStore((s) => s.uploadDocument)
+  const removeDocument = useAIStore((s) => s.removeDocument)
+  const isUploadingDocument = useAIStore((s) => s.isUploadingDocument)
+
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+
+  async function handleFiles(files: FileList | null) {
+    if (!files || !deckId) return
+    setUploadError(null)
+    for (const file of Array.from(files)) {
+      const doc = await uploadDocument(deckId, file)
+      if (!doc) {
+        setUploadError(`Couldn't upload ${file.name}`)
+      }
+    }
+  }
+
+  async function handleRemove(docId: string) {
+    if (!deckId) return
+    await removeDocument(deckId, docId)
+  }
 
   return (
     <div className="space-y-5">
@@ -53,6 +90,117 @@ export default function CoverEditor({ data, onChange }: CoverEditorProps) {
         <p className="mt-1.5 text-xs text-text-tertiary">
           This appears on the cover page below the title. Keep it concise and engaging.
         </p>
+      </div>
+
+      {/* Context documents */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-sm font-medium text-text">
+            Context Documents
+          </label>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={!deckId || isUploadingDocument}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-text-secondary hover:text-accent hover:border-accent hover:bg-accent-light transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isUploadingDocument ? (
+              <>
+                <LoadingDots />
+                <span>Uploading…</span>
+              </>
+            ) : (
+              <>
+                <svg
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 4.5v15m7.5-7.5h-15"
+                  />
+                </svg>
+                <span>Upload context</span>
+              </>
+            )}
+          </button>
+          <input
+            ref={inputRef}
+            type="file"
+            accept={ACCEPTED}
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              handleFiles(e.target.files)
+              e.target.value = ''
+            }}
+          />
+        </div>
+
+        {deckDocuments.length === 0 ? (
+          <p className="text-xs text-text-tertiary">
+            Drop the job description, call notes, or any briefing documents here.
+            Every AI step downstream will read from these.
+          </p>
+        ) : (
+          <ul className="flex flex-wrap gap-2">
+            {deckDocuments.map((doc) => (
+              <li
+                key={doc.id}
+                className="group inline-flex items-center gap-2 rounded-md border border-border bg-bg-subtle pl-2.5 pr-1.5 py-1 text-xs text-text"
+                title={`${doc.fileType.toUpperCase()} · ${formatBytes(doc.fileSize)}`}
+              >
+                <svg
+                  className="h-3.5 w-3.5 text-text-tertiary shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+                  />
+                </svg>
+                <span className="font-medium truncate max-w-[18rem]">
+                  {doc.fileName}
+                </span>
+                <span className="text-text-tertiary">
+                  {formatBytes(doc.fileSize)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleRemove(doc.id)}
+                  className="h-5 w-5 flex items-center justify-center rounded text-text-tertiary hover:text-rose-600 hover:bg-white transition-colors"
+                  aria-label={`Remove ${doc.fileName}`}
+                >
+                  <svg
+                    className="h-3 w-3"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {uploadError && (
+          <p className="mt-2 text-xs text-rose-600">{uploadError}</p>
+        )}
       </div>
 
       {/* Hero image */}
