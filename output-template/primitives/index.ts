@@ -30,7 +30,7 @@ export const primitivesCss: string = [
   initialsCss,
 ].join('\n')
 
-export { renderHero, renderConfidentialityBar, renderFooter } from './hero'
+export { renderHero, renderIntroSection, renderConfidentialityBar, renderFooter } from './hero'
 export { renderAccordionSection } from './accordion'
 export { renderInitials, renderAvatar } from './initials'
 export { esc, escAttr, escMultiline } from './escape'

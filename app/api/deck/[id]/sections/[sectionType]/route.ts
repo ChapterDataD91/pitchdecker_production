@@ -39,7 +39,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     )
   }
 
-  const section = deckStorage.getSection(id, sectionType)
+  const section = await deckStorage.getSection(id, sectionType)
 
   if (section === undefined) {
     return NextResponse.json({ error: 'Deck not found' }, { status: 404 })
@@ -58,17 +58,12 @@ export async function PUT(request: Request, { params }: RouteParams) {
     )
   }
 
-  const deck = deckStorage.get(id)
-  if (!deck) {
-    return NextResponse.json({ error: 'Deck not found' }, { status: 404 })
-  }
-
   try {
     const body = await request.json()
-    const updated = deckStorage.updateSection(id, sectionType, body)
+    const updated = await deckStorage.updateSection(id, sectionType, body)
 
     if (!updated) {
-      return NextResponse.json({ error: 'Update failed' }, { status: 500 })
+      return NextResponse.json({ error: 'Deck not found' }, { status: 404 })
     }
 
     return NextResponse.json({ success: true })

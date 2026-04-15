@@ -18,7 +18,7 @@ not the client-facing output.
 - The tool should feel like it respects the consultant's time
 
 ## Tech Stack
-- Next.js 14+ (App Router), React 18, TypeScript
+- Next.js 16+ (App Router), React 18, TypeScript
 - Tailwind CSS with custom theme (design tokens in tailwind.config)
 - Framer Motion for transitions (slide-outs, content swaps, drags)
 - @dnd-kit for drag-and-drop (criteria reorder, candidate ranking)

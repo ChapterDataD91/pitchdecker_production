@@ -1,18 +1,36 @@
 // ---------------------------------------------------------------------------
-// In-memory deck storage — shared across all API routes
-// Ephemeral: data is lost on server restart. Will be replaced with
-// persistent storage (Azure SQL / MongoDB) when databases are connected.
+// Deck storage — MongoDB-backed.
+//
+// Decks live in TextDocs.pitchdecker, one document per deck.
+// The document mirrors the Deck interface verbatim, with `_id` duplicating
+// `Deck.id` (UUID). All I/O methods are async; the two pure helpers
+// (isSectionComplete, computeCompletedSections) stay synchronous.
 // ---------------------------------------------------------------------------
 
+import type { Collection } from 'mongodb'
 import type { Deck, DeckSummary, DeckSections } from '@/lib/types'
 import { createEmptyDeck } from '@/lib/types'
 import { SECTIONS } from '@/lib/theme'
 import type { SectionId } from '@/lib/theme'
+import { getDb } from '@/lib/db/mongodb'
 
-const storage = new Map<string, Deck>()
+const COLLECTION_NAME = 'pitchdecker'
+
+type DeckDoc = Deck & { _id: string }
+
+async function decks(): Promise<Collection<DeckDoc>> {
+  const db = await getDb()
+  return db.collection<DeckDoc>(COLLECTION_NAME)
+}
+
+function stripId(doc: DeckDoc): Deck {
+  const { _id, ...rest } = doc
+  void _id
+  return rest
+}
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Pure helpers (sync)
 // ---------------------------------------------------------------------------
 
 function computeCompletedSections(deck: Deck): number {
@@ -59,7 +77,7 @@ function isSectionComplete(deck: Deck, sectionId: SectionId): boolean {
     case 'candidates':
       return s.candidates.candidates.length > 0
     case 'fee':
-      return s.fee.feePercentage > 0
+      return s.fee.amount > 0
     default:
       return false
   }
@@ -77,85 +95,87 @@ function toSummary(deck: Deck): DeckSummary {
 }
 
 // ---------------------------------------------------------------------------
-// Public API
+// Public API (async)
 // ---------------------------------------------------------------------------
 
 export const deckStorage = {
-  /** Get all decks as lightweight summaries */
-  getAll(): DeckSummary[] {
-    return Array.from(storage.values()).map(toSummary)
+  async getAll(): Promise<DeckSummary[]> {
+    const col = await decks()
+    const docs = await col.find({}).sort({ updatedAt: -1 }).toArray()
+    return docs.map((doc) => toSummary(stripId(doc)))
   },
 
-  /** Get a full deck by ID, or undefined if not found */
-  get(id: string): Deck | undefined {
-    return storage.get(id)
+  async get(id: string): Promise<Deck | undefined> {
+    const col = await decks()
+    const doc = await col.findOne({ _id: id })
+    return doc ? stripId(doc) : undefined
   },
 
-  /** Create a new empty deck and store it */
-  create(id: string, clientName: string, roleTitle: string): Deck {
+  async create(id: string, clientName: string, roleTitle: string): Promise<Deck> {
     const deck = createEmptyDeck(id, clientName, roleTitle)
-    storage.set(id, deck)
+    const col = await decks()
+    await col.insertOne({ _id: id, ...deck })
     return deck
   },
 
-  /** Merge partial deck data (top-level fields, not sections) */
-  update(id: string, partial: Partial<Omit<Deck, 'id' | 'sections'>>): Deck | undefined {
-    const deck = storage.get(id)
-    if (!deck) return undefined
-
-    const updated: Deck = {
-      ...deck,
-      ...partial,
-      updatedAt: new Date().toISOString(),
-    }
-    storage.set(id, updated)
-    return updated
+  async update(
+    id: string,
+    partial: Partial<Omit<Deck, 'id' | 'sections'>>,
+  ): Promise<Deck | undefined> {
+    const col = await decks()
+    const result = await col.findOneAndUpdate(
+      { _id: id },
+      { $set: { ...partial, updatedAt: new Date().toISOString() } },
+      { returnDocument: 'after' },
+    )
+    return result ? stripId(result) : undefined
   },
 
-  /** Update a specific section within a deck */
-  updateSection<K extends keyof DeckSections>(
+  async updateSection<K extends keyof DeckSections>(
     deckId: string,
     sectionKey: K,
     data: Partial<DeckSections[K]>,
-  ): Deck | undefined {
-    const deck = storage.get(deckId)
-    if (!deck) return undefined
+  ): Promise<Deck | undefined> {
+    const col = await decks()
+    const existing = await col.findOne({ _id: deckId })
+    if (!existing) return undefined
 
-    const updatedSection = {
-      ...deck.sections[sectionKey],
+    const mergedSection = {
+      ...existing.sections[sectionKey],
       ...data,
     } as DeckSections[K]
 
-    const updated: Deck = {
-      ...deck,
-      updatedAt: new Date().toISOString(),
-      sections: {
-        ...deck.sections,
-        [sectionKey]: updatedSection,
+    const result = await col.findOneAndUpdate(
+      { _id: deckId },
+      {
+        $set: {
+          [`sections.${sectionKey}`]: mergedSection,
+          updatedAt: new Date().toISOString(),
+        },
       },
-    }
-    storage.set(deckId, updated)
-    return updated
+      { returnDocument: 'after' },
+    )
+    return result ? stripId(result) : undefined
   },
 
-  /** Get a specific section from a deck */
-  getSection<K extends keyof DeckSections>(
+  async getSection<K extends keyof DeckSections>(
     deckId: string,
     sectionKey: K,
-  ): DeckSections[K] | undefined {
-    const deck = storage.get(deckId)
-    if (!deck) return undefined
-    return deck.sections[sectionKey]
+  ): Promise<DeckSections[K] | undefined> {
+    const col = await decks()
+    const doc = await col.findOne(
+      { _id: deckId },
+      { projection: { [`sections.${sectionKey}`]: 1 } },
+    )
+    return doc?.sections?.[sectionKey]
   },
 
-  /** Delete a deck by ID */
-  delete(id: string): boolean {
-    return storage.delete(id)
+  async delete(id: string): Promise<boolean> {
+    const col = await decks()
+    const result = await col.deleteOne({ _id: id })
+    return result.deletedCount === 1
   },
 
-  /** Check if a section is complete */
   isSectionComplete,
-
-  /** Count completed sections for a deck */
   computeCompletedSections,
 }

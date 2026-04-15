@@ -97,7 +97,7 @@ function computeSectionStatus(deck: Deck, sectionId: SectionId): SectionStatus {
     case 'candidates':
       return s.candidates.candidates.length > 0 ? 'complete' : 'empty'
     case 'fee':
-      return s.fee.feeStructure ? 'complete' : 'empty'
+      return s.fee.amount > 0 ? 'complete' : 'empty'
     default:
       return 'empty'
   }

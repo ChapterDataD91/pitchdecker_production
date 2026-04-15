@@ -1,8 +1,89 @@
-// Phase-A stub. Phase-B will replace with fee + instalments + guarantee callout.
-import type { FeeSection } from '@/lib/types'
-import type { Brand } from '../brand'
-import { sectionPlaceholder } from './_placeholder'
+// ---------------------------------------------------------------------------
+// Fee Proposal: a centered narrow .bx callout listing the search fee, the
+// instalment schedule, the guarantee, and any optional add-ons.
+// Reference: demo HTML L1330-1338.
+//
+// Renders inside a `.sb--centered` body modifier (set in layout.ts) so the
+// callout is centered in the section, not left-padded like other sections.
+// ---------------------------------------------------------------------------
 
-export function renderFee(_data: FeeSection, _brand: Brand): string {
-  return sectionPlaceholder('Fee Proposal — rendered in Phase B')
+import type { FeeSection, FeeInstalment, FeeAddon } from '@/lib/types'
+import type { Brand } from '../brand'
+import { esc } from '../primitives/escape'
+
+const NBSP = '\u202F' // narrow no-break space — Top of Minds thousands separator
+
+function formatMoney(amount: number, currency: string): string {
+  const symbol = currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : currency === 'USD' ? '$' : `${currency} `
+  return `${symbol}${amount.toLocaleString('en-GB').replace(/,/g, NBSP)}`
+}
+
+function joinSentence(items: string[]): string {
+  if (items.length === 0) return ''
+  if (items.length === 1) return items[0]!
+  if (items.length === 2) return `${items[0]} and ${items[1]}`
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`
+}
+
+function renderFeeLine(data: FeeSection): string {
+  const money = formatMoney(data.amount, data.currency)
+  const vat = data.vatNote.trim() ? ` (${esc(data.vatNote)})` : ''
+  const triggers = data.instalments
+    .map((i: FeeInstalment) => i.trigger.trim())
+    .filter(Boolean)
+
+  if (triggers.length === 0) {
+    return `<p><strong>Search fee:</strong> The fee of ${esc(money)}${vat}.</p>`
+  }
+
+  const numWord =
+    triggers.length === 2
+      ? 'two'
+      : triggers.length === 3
+        ? 'three'
+        : triggers.length === 4
+          ? 'four'
+          : `${triggers.length}`
+  return `<p><strong>Search fee:</strong> The fee of ${esc(money)}${vat} is invoiced in ${esc(numWord)} equal instalments: ${esc(joinSentence(triggers))}.</p>`
+}
+
+function renderGuaranteeLine(data: FeeSection): string {
+  if (data.guaranteeMonths <= 0 && !data.guaranteeNote.trim()) return ''
+  const window =
+    data.guaranteeMonths > 0
+      ? `${data.guaranteeMonths} ${data.guaranteeMonths === 1 ? 'month' : 'months'}`
+      : ''
+  const note = data.guaranteeNote.trim()
+  if (note && window) {
+    // If the note already mentions a window, prefer the note verbatim.
+    return `<p><strong>Guarantee:</strong> ${esc(note)}</p>`
+  }
+  if (note) return `<p><strong>Guarantee:</strong> ${esc(note)}</p>`
+  return `<p><strong>Guarantee:</strong> Free replacement search if the appointed candidate leaves the position within ${esc(window)}.</p>`
+}
+
+function renderAddonLine(addon: FeeAddon, currency: string, vatNote: string): string {
+  const money = formatMoney(addon.amount, currency)
+  const vat = vatNote.trim() ? ` (${esc(vatNote)})` : ''
+  const desc = addon.description.trim()
+  const body = desc
+    ? `${esc(desc)}: ${esc(money)}${vat}.`
+    : `${esc(money)}${vat}.`
+  return `<p><strong>Optional — ${esc(addon.label)}:</strong> ${body}</p>`
+}
+
+export function renderFee(data: FeeSection, _brand: Brand): string {
+  if (data.amount <= 0) {
+    return `<div class="ot-empty">No fee details captured yet.</div>`
+  }
+
+  const lines = [
+    renderFeeLine(data),
+    renderGuaranteeLine(data),
+    ...data.addons.map((a) => renderAddonLine(a, data.currency, data.vatNote)),
+  ]
+    .filter(Boolean)
+    .join('')
+
+  return `<div class="bx" style="text-align:left;margin:20px auto;max-width:780px;width:100%">${lines}</div>`
 }

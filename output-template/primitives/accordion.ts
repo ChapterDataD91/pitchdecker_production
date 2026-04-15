@@ -73,6 +73,14 @@ export const accordionCss = `
 .sec:not(.open) .sb { opacity: 0; }
 .sec.open .sb { opacity: 1; max-height: 12000px; padding: 8px 0 56px 56px; }
 
+/* Centered body modifier — used by Fee to render a narrow centered callout. */
+.sec.open .sb--centered {
+  padding: 8px 0 56px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 .sb p { font-size: 19px; color: var(--txt2); line-height: 1.8; margin-bottom: 20px; }
 
 /* Empty-section placeholder (used when a Phase-A section renderer has no content yet) */
@@ -107,6 +115,10 @@ export const accordionCss = `
 /**
  * Wrap a rendered section body in the accordion shell.
  * First section can be marked open by default.
+ *
+ * `bodyClassExtra` lets a section opt into shell-body modifiers (e.g. `.sb--centered`
+ * for the Fee section, which renders a narrow centered callout instead of the
+ * standard left-aligned content block).
  */
 export function renderAccordionSection(opts: {
   number: number
@@ -114,9 +126,11 @@ export function renderAccordionSection(opts: {
   anchorId?: string
   open?: boolean
   body: string
+  bodyClassExtra?: string
 }): string {
   const idAttr = opts.anchorId ? ` id="${esc(opts.anchorId)}"` : ''
   const openClass = opts.open ? ' open' : ''
+  const sbClass = opts.bodyClassExtra ? `sb ${esc(opts.bodyClassExtra)}` : 'sb'
   return `<div class="sec${openClass}"${idAttr}>
   <div class="sh">
     <div class="sl">
@@ -125,6 +139,6 @@ export function renderAccordionSection(opts: {
     </div>
     <svg class="sv" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"/></svg>
   </div>
-  <div class="sb">${opts.body}</div>
+  <div class="${sbClass}">${opts.body}</div>
 </div>`
 }

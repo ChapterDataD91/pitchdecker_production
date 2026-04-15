@@ -20,6 +20,9 @@ const HOGAN_TEMPLATE: AssessmentSection = {
     photoUrl: '',
     bio: 'Marlies is our in-house assessment specialist and certified Hogan practitioner. Marlies uses the Hogan Assessment Suite, the gold standard for leadership assessment globally, trusted by over 75% of Fortune 500 companies. More information: hoganassessments.com.',
   },
+  providerName: 'Hogan',
+  sampleReport: null,
+  mtAssessment: null,
   pillars: [
     {
       key: 'HPI',

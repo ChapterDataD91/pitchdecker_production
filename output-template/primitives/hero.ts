@@ -1,7 +1,15 @@
 // ---------------------------------------------------------------------------
-// Hero chrome + hero banner image.
-// Renders the big opening block: left side (logo, badge, title, sub, meta),
-// right side (hero illustration), followed by the full-width clipped banner.
+// Hero chrome + hero banner image + intro section.
+//
+// Sequence (matches demo HTML L270-306):
+//   1. Hero header (left: logo+badge+h1+tagline+meta+client-logo; right: hero image)
+//   2. Hero banner (full-width, clip-path angled)
+//   3. Sand-gradient divider
+//   4. Intro section (client logo repeated + role-title label + intro paragraph)
+//
+// When clientLogoUrl is empty, the navy fallback block displays the client name
+// in white uppercase (matches the demo's MedCore-logo treatment when the brand
+// mark is text-only).
 // ---------------------------------------------------------------------------
 
 import type { Brand } from '../brand'
@@ -55,11 +63,28 @@ export const heroCss = `
   font-family: var(--sans);
 }
 .hero .meta b { color: var(--navy); font-weight: 600; }
-.hero .client-logo {
+
+/* Client logo: real image OR navy fallback block. */
+.hero .client-logo,
+.intro-client-logo {
   height: 64px; width: auto; max-width: 300px;
-  display: block; margin-top: 32px;
-  object-fit: contain; align-self: flex-start;
+  display: block; object-fit: contain;
 }
+.hero .client-logo { margin-top: 32px; align-self: flex-start; }
+.intro-client-logo { margin: 0 0 24px 0; }
+
+.client-logo-fallback {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 64px; padding: 0 28px; min-width: 180px;
+  background: #2A384E;
+  color: #fff;
+  font-family: var(--sans);
+  font-size: 14px; font-weight: 600;
+  letter-spacing: 2.5px; text-transform: uppercase;
+  border-radius: 6px;
+}
+.hero .client-logo-fallback { margin-top: 32px; align-self: flex-start; }
+.intro .client-logo-fallback { margin-bottom: 24px; }
 
 /* Full-width banner image, with the signature clip-path */
 .hero-banner {
@@ -85,6 +110,26 @@ export const heroCss = `
   opacity: .4;
 }
 
+/* Intro section between banner and accordion */
+.intro { padding: 72px 0 48px; }
+.intro .role-label {
+  font-family: var(--sans);
+  font-size: 15px; font-weight: 500;
+  color: var(--txt3);
+  letter-spacing: 2px; text-transform: uppercase;
+  margin: 16px 0 24px;
+}
+.intro p {
+  font-size: 18px; color: var(--txt2);
+  max-width: 680px;
+  line-height: 1.78;
+}
+.intro p + p { margin-top: 14px; }
+.intro .intro-divider {
+  margin-bottom: 24px; padding-bottom: 24px;
+  border-bottom: 1px solid var(--ln);
+}
+
 @media (max-width: 768px) {
   .hero { flex-direction: column; min-height: auto; }
   .hero-left { flex: none; width: 100%; padding: 40px 20px 32px; }
@@ -94,15 +139,32 @@ export const heroCss = `
   .hero .sub { font-size: 14px; max-width: 100%; }
   .hero .meta { flex-direction: column; gap: 10px; font-size: 13px; }
   .hero-logo { width: 44px; height: 44px; margin-bottom: 20px; }
-  .client-logo { height: 140px; margin-top: 20px; }
+  .client-logo, .client-logo-fallback { margin-top: 20px; }
   .hero-banner img, .hero-banner .hero-banner-placeholder { height: 220px; }
+  .intro { padding: 40px 0 32px; }
+  .intro p { font-size: 15px; }
 }
 @media (max-width: 480px) {
   .hero h1 { font-size: 26px; }
   .hero-left { padding: 32px 16px 24px; }
   .hero-banner img, .hero-banner .hero-banner-placeholder { height: 180px; }
+  .client-logo-fallback { font-size: 12px; padding: 0 20px; min-width: 140px; height: 52px; }
 }
 `
+
+/**
+ * Renders the client logo if a URL exists, or a styled navy block bearing
+ * the client name as a fallback. Returns empty string only if BOTH the URL
+ * and the client name are absent (which would be an empty-cover edge case).
+ */
+function renderClientLogo(cover: CoverSection, location: 'hero' | 'intro'): string {
+  if (cover.clientLogoUrl && cover.clientLogoUrl.trim() !== '') {
+    const cls = location === 'hero' ? 'client-logo' : 'intro-client-logo'
+    return `<img class="${cls}" src="${escAttr(cover.clientLogoUrl)}" alt="${escAttr(cover.clientName)} logo">`
+  }
+  if (!cover.clientName.trim()) return ''
+  return `<div class="client-logo-fallback">${esc(cover.clientName)}</div>`
+}
 
 export function renderHero(cover: CoverSection, brand: Brand): string {
   const { stats } = cover
@@ -110,16 +172,12 @@ export function renderHero(cover: CoverSection, brand: Brand): string {
     ? `<img src="${escAttr(cover.heroImageUrl)}" alt="${escAttr(cover.roleTitle)}">`
     : `<div class="hero-placeholder">Hero image</div>`
 
-  // NOTE: cover.bannerImageUrl is a Phase-B schema addition. Guarded here so
-  // the shell renders cleanly against Phase-A types.
-  const bannerUrl = (cover as unknown as { bannerImageUrl?: string }).bannerImageUrl
-  const banner = bannerUrl && bannerUrl.trim() !== ''
-    ? `<div class="hero-banner"><img src="${escAttr(bannerUrl)}" alt="${escAttr(cover.clientName)}"></div>`
-    : ''
+  const banner = cover.bannerImageUrl && cover.bannerImageUrl.trim() !== ''
+    ? `<div class="hero-banner"><img src="${escAttr(cover.bannerImageUrl)}" alt="${escAttr(cover.clientName)}"></div>`
+    : `<div class="hero-banner"><div class="hero-banner-placeholder"></div></div>`
 
-  const clientLogoUrl = (cover as unknown as { clientLogoUrl?: string }).clientLogoUrl
-  const clientLogo = clientLogoUrl && clientLogoUrl.trim() !== ''
-    ? `<img class="client-logo" src="${escAttr(clientLogoUrl)}" alt="${escAttr(cover.clientName)} logo">`
+  const tagline = cover.tagline?.trim()
+    ? `<p class="sub">${esc(cover.tagline)}</p>`
     : ''
 
   return `<header class="hero">
@@ -127,18 +185,50 @@ export function renderHero(cover: CoverSection, brand: Brand): string {
     <div class="hero-logo">${brand.logoSvg}</div>
     <div class="badge">Executive Search Proposal</div>
     <h1>${esc(cover.roleTitle || 'Role title')} for ${esc(cover.clientName || 'Client')}</h1>
-    <p class="sub">${esc(cover.introParagraph || '')}</p>
+    ${tagline}
     <div class="meta">
       <span><b>${esc(stats.criteriaCount)}</b> weighted criteria</span>
       <span><b>${esc(stats.timelineWeeks)} weeks</b> total timeline</span>
       <span><b>${esc(stats.candidateCount)}</b> candidate profiles</span>
     </div>
-    ${clientLogo}
+    ${renderClientLogo(cover, 'hero')}
   </div>
   <div class="hero-right">${heroImage}</div>
 </header>
 ${banner}
 <div class="hero-divider"></div>`
+}
+
+/**
+ * Intro section between the hero banner and the accordion. Repeats the
+ * client logo, shows the role-title label (Barlow uppercase), and renders
+ * the longer introParagraph (split into multiple <p> on blank-line breaks).
+ */
+export function renderIntroSection(cover: CoverSection, _brand: Brand): string {
+  const intro = cover.introParagraph?.trim()
+  if (!intro && !cover.clientName.trim() && !cover.roleTitle.trim()) return ''
+
+  const paragraphs = intro
+    ? intro
+        .split(/\n{2,}/)
+        .map((block) => `<p>${esc(block.trim()).replace(/\n/g, '<br>')}</p>`)
+        .join('')
+    : ''
+
+  const logo = renderClientLogo(cover, 'intro')
+  const logoBlock = logo
+    ? `<div class="intro-divider">${logo}</div>`
+    : ''
+
+  const roleLabel = cover.roleTitle.trim()
+    ? `<div class="role-label">${esc(cover.roleTitle)}</div>`
+    : ''
+
+  return `<section class="intro"><div class="w">
+${logoBlock}
+${roleLabel}
+${paragraphs}
+</div></section>`
 }
 
 export function renderConfidentialityBar(brand: Brand): string {

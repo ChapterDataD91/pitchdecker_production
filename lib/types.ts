@@ -13,10 +13,18 @@ export type SectionStatus = 'empty' | 'in-progress' | 'complete'
 
 export type DeckStatus = 'draft' | 'in-progress' | 'complete'
 
+// Legacy union — preserved for documentation; not used by FeeSection anymore.
+// Top of Minds works with flat-fee retainer; the union is kept exported in
+// case other code (or a future white-label) wants to surface "structure".
 export type FeeStructure = 'retainer' | 'contingency' | 'hybrid'
 
 export type Weight = 1 | 2 | 3 | 4 | 5
 
+/**
+ * @deprecated Hogan-specific pillar keys are content presets, not type constraints.
+ * Kept exported for the AssessmentEditor's "Apply Hogan template" button. New code
+ * should treat AssessmentPillar.key as a free-form string.
+ */
 export type HoganPillarKey = 'HPI' | 'HDS' | 'MVPI'
 
 // ---------------------------------------------------------------------------
@@ -32,8 +40,15 @@ export interface CoverStats {
 export interface CoverSection {
   clientName: string
   roleTitle: string
+  /** Short tagline shown beneath the hero title (1–2 sentences). */
+  tagline?: string
+  /** Longer paragraph rendered in the dedicated intro section below the hero banner. */
   introParagraph: string
   heroImageUrl: string
+  /** Square logo of the client (renders in the hero left-side and again in the intro section). Optional; falls back to a navy block when absent. */
+  clientLogoUrl?: string
+  /** Wide banner image displayed full-width below the hero. Optional; section omits the band if absent. */
+  bannerImageUrl?: string
   stats: CoverStats
 }
 
@@ -156,6 +171,10 @@ export interface CredentialsSection {
 // Timeline
 // ---------------------------------------------------------------------------
 
+/** Active phase = numbered, runs the search forward.
+ *  Holiday phase = dashed placeholder block (e.g. summer break, year-end). */
+export type TimelinePhaseKind = 'active' | 'holiday'
+
 export interface TimelinePhase {
   id: string
   name: string
@@ -163,11 +182,17 @@ export interface TimelinePhase {
   durationWeeks: number
   milestones: string[]
   order: number
+  /** Renders as a dashed placeholder when 'holiday'. Defaults to 'active'. */
+  kind?: TimelinePhaseKind
+  /** Optional human-readable week range, e.g. "Week 1–2". Falls back to derived "Week N–M" if absent. */
+  weekRangeLabel?: string
 }
 
 export interface TimelineSection {
   phases: TimelinePhase[]
   totalWeeks: number
+  /** Free-text confidentiality / process note rendered as a sand .gd block at the end. */
+  confidentialityNote?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -182,17 +207,39 @@ export interface AssessmentAssessor {
 }
 
 export interface AssessmentPillar {
-  key: HoganPillarKey
+  /** Free-form short identifier (e.g. "HPI", "HDS", "MVPI" for Hogan). */
+  key: string
   label: string
   description: string
 }
 
+/** Optional CTA shown beneath the pillar block (e.g. link to a sample report). */
+export interface AssessmentCta {
+  url: string
+  label: string
+}
+
+/** Optional priced add-on for assessing the existing management team. */
+export interface AssessmentMtBlock {
+  enabled: boolean
+  description: string
+  amount: number
+  ctaUrl: string
+  ctaLabel: string
+}
+
 export interface AssessmentSection {
   assessor: AssessmentAssessor
+  /** Display name of the assessment provider, e.g. "Hogan", "SHL". */
+  providerName: string
   pillars: AssessmentPillar[]
   processDescription: string
   purposes: string[]
   costsNote: string
+  /** Optional CTA card linking to a sample individual report. */
+  sampleReport?: AssessmentCta | null
+  /** Optional MT (management-team) assessment add-on block. */
+  mtAssessment?: AssessmentMtBlock | null
 }
 
 // ---------------------------------------------------------------------------
@@ -280,29 +327,56 @@ export interface Candidate {
   languages?: string[]
   linkedinUrl?: string
   parseError?: string
+  /** Bullet list of standout positives surfaced after assessment. */
+  strengths?: string[]
+  /** Bullet list of risks / development areas surfaced after assessment. */
+  risks?: string[]
 }
 
 export interface CandidatesSection {
   candidates: Candidate[]
+  /** GDPR / hard-factors gate explanatory note shown above the candidate grid. */
+  hardFactorsGateNote?: string
 }
 
 // ---------------------------------------------------------------------------
 // Fee Proposal
 // ---------------------------------------------------------------------------
 
-export interface PaymentMilestone {
+/** A single instalment in the fee schedule. The amount is implicit: the total
+ *  fee is split equally across all instalments unless future work introduces
+ *  a per-instalment override. */
+export interface FeeInstalment {
+  id: string
+  /** Short label, e.g. "Engagement", "Shortlist", "Placement" */
+  label: string
+  /** Trigger phrase, e.g. "at engagement", "upon shortlist presentation" */
+  trigger: string
+}
+
+/** An optional priced add-on (e.g. management-team assessment). */
+export interface FeeAddon {
   id: string
   label: string
-  percentage: number
+  amount: number
   description: string
 }
 
 export interface FeeSection {
-  feeStructure: FeeStructure
-  feePercentage: number
-  paymentMilestones: PaymentMilestone[]
-  exclusivityTerms: string
-  guaranteePeriod: string
+  /** Flat fee amount in `currency` units (e.g. 100000 = €100,000) */
+  amount: number
+  /** ISO 4217 currency code, default 'EUR' */
+  currency: string
+  /** VAT/tax disclaimer, e.g. "excl. VAT" */
+  vatNote: string
+  /** Schedule of instalments. Empty → fee is paid in a single sum. */
+  instalments: FeeInstalment[]
+  /** Replacement guarantee window in months. 0 = no guarantee. */
+  guaranteeMonths: number
+  /** Free-text guarantee description (rendered after the guarantee header). */
+  guaranteeNote: string
+  /** Optional priced add-ons (e.g. MT assessment). */
+  addons: FeeAddon[]
 }
 
 // ---------------------------------------------------------------------------
@@ -386,8 +460,11 @@ export function createEmptyDeck(
     cover: {
       clientName,
       roleTitle,
+      tagline: '',
       introParagraph: '',
       heroImageUrl: '',
+      clientLogoUrl: '',
+      bannerImageUrl: '',
       stats: {
         criteriaCount: 0,
         timelineWeeks: 0,
@@ -420,6 +497,7 @@ export function createEmptyDeck(
     timeline: {
       phases: [],
       totalWeeks: 0,
+      confidentialityNote: '',
     },
     assessment: {
       assessor: {
@@ -428,10 +506,13 @@ export function createEmptyDeck(
         photoUrl: '',
         bio: '',
       },
+      providerName: '',
       pillars: [],
       processDescription: '',
       purposes: [],
       costsNote: '',
+      sampleReport: null,
+      mtAssessment: null,
     },
     personas: {
       archetypes: [],
@@ -444,13 +525,16 @@ export function createEmptyDeck(
     },
     candidates: {
       candidates: [],
+      hardFactorsGateNote: '',
     },
     fee: {
-      feeStructure: 'retainer',
-      feePercentage: 0,
-      paymentMilestones: [],
-      exclusivityTerms: '',
-      guaranteePeriod: '',
+      amount: 0,
+      currency: 'EUR',
+      vatNote: 'excl. VAT',
+      instalments: [],
+      guaranteeMonths: 0,
+      guaranteeNote: '',
+      addons: [],
     },
   }
 

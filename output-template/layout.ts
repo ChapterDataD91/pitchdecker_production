@@ -31,6 +31,8 @@ interface AccordionSectionDef {
   id: Exclude<SectionId, 'cover'>
   title: string
   anchorId?: string
+  /** Optional class added to the .sb body wrapper, e.g. "sb--centered" for Fee. */
+  bodyClassExtra?: string
   render: (deck: Deck, brand: Brand, slugMap: Map<string, string>) => string
 }
 
@@ -86,6 +88,7 @@ export const ACCORDION_SECTIONS: AccordionSectionDef[] = [
   {
     id: 'fee',
     title: 'Fee Proposal',
+    bodyClassExtra: 'sb--centered',
     render: (deck, brand) => renderFee(deck.sections.fee, brand),
   },
 ]
@@ -126,6 +129,7 @@ export function renderAccordion(
         number: visibleNumber,
         title: section.title,
         anchorId: section.anchorId,
+        bodyClassExtra: section.bodyClassExtra,
         open: visibleNumber === 1,
         body,
       }),

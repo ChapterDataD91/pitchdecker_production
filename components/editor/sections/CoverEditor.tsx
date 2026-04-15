@@ -75,20 +75,37 @@ export default function CoverEditor({ data, onChange }: CoverEditorProps) {
         </div>
       </div>
 
-      {/* Intro paragraph */}
+      {/* Tagline (short hero sub) */}
+      <div>
+        <label className="block text-sm font-medium text-text mb-1.5">
+          Hero Tagline
+        </label>
+        <textarea
+          placeholder="Short tagline shown beneath the hero title (1–2 sentences)."
+          defaultValue={data.tagline ?? ''}
+          rows={2}
+          style={{ fieldSizing: 'content' } as React.CSSProperties}
+          className="w-full min-h-[3.5rem] rounded-md border border-border bg-bg px-3 py-2.5 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent resize-none"
+        />
+        <p className="mt-1.5 text-xs text-text-tertiary">
+          Renders directly under the title in the hero. For a longer paragraph, use the introduction below.
+        </p>
+      </div>
+
+      {/* Intro paragraph (longer, for the dedicated intro section) */}
       <div>
         <label className="block text-sm font-medium text-text mb-1.5">
           Introduction
         </label>
         <textarea
-          placeholder="Write a compelling introduction paragraph for this pitch deck..."
+          placeholder="Longer introduction paragraph rendered in the dedicated intro section below the hero banner."
           defaultValue={data.introParagraph}
           rows={3}
           style={{ fieldSizing: 'content' } as React.CSSProperties}
           className="w-full min-h-[5rem] rounded-md border border-border bg-bg px-3 py-2.5 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent resize-none"
         />
         <p className="mt-1.5 text-xs text-text-tertiary">
-          This appears on the cover page below the title. Keep it concise and engaging.
+          Use a blank line between paragraphs to split into multiple paragraphs.
         </p>
       </div>
 

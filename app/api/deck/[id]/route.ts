@@ -13,7 +13,7 @@ interface RouteParams {
 
 export async function GET(_request: Request, { params }: RouteParams) {
   const { id } = await params
-  const deck = deckStorage.get(id)
+  const deck = await deckStorage.get(id)
 
   if (!deck) {
     return NextResponse.json({ error: 'Deck not found' }, { status: 404 })
@@ -24,18 +24,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
 export async function PUT(request: Request, { params }: RouteParams) {
   const { id } = await params
-  const deck = deckStorage.get(id)
-
-  if (!deck) {
-    return NextResponse.json({ error: 'Deck not found' }, { status: 404 })
-  }
 
   try {
     const body = await request.json()
-    const updated = deckStorage.update(id, body)
+    const updated = await deckStorage.update(id, body)
 
     if (!updated) {
-      return NextResponse.json({ error: 'Update failed' }, { status: 500 })
+      return NextResponse.json({ error: 'Deck not found' }, { status: 404 })
     }
 
     return NextResponse.json({ success: true })
@@ -49,7 +44,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
 export async function DELETE(_request: Request, { params }: RouteParams) {
   const { id } = await params
-  const deleted = deckStorage.delete(id)
+  const deleted = await deckStorage.delete(id)
 
   if (!deleted) {
     return NextResponse.json({ error: 'Deck not found' }, { status: 404 })

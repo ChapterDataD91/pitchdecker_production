@@ -22,7 +22,7 @@ export async function POST(
   const { id } = await params
 
   // --- 1. Fetch -----------------------------------------------------------
-  const deck = deckStorage.get(id)
+  const deck = await deckStorage.get(id)
   if (!deck) {
     return NextResponse.json({ error: 'Deck not found' }, { status: 404 })
   }

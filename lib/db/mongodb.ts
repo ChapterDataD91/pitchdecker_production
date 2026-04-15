@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
-// MongoDB client singleton — connects to the pitchdecker database
-// on aimee-prod.stjbrda.mongodb.net
+// MongoDB client singleton — connects to the TextDocs database on
+// aimee-prod.stjbrda.mongodb.net. Decks live in the `pitchdecker` collection.
 // ---------------------------------------------------------------------------
 
 import { MongoClient, type Db } from 'mongodb'
@@ -8,7 +8,7 @@ import { MongoClient, type Db } from 'mongodb'
 let client: MongoClient | null = null
 let db: Db | null = null
 
-const DATABASE_NAME = 'pitchdecker'
+const DATABASE_NAME = 'TextDocs'
 
 export async function getDb(): Promise<Db> {
   if (db) return db

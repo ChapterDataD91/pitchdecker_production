@@ -8,7 +8,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { deckStorage } from '@/lib/deck-storage'
 
 export async function GET() {
-  const decks = deckStorage.getAll()
+  const decks = await deckStorage.getAll()
   return NextResponse.json({ decks })
 }
 
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     }
 
     const id = uuidv4()
-    const deck = deckStorage.create(id, clientName, roleTitle)
+    const deck = await deckStorage.create(id, clientName, roleTitle)
 
     return NextResponse.json({ id: deck.id, deck }, { status: 201 })
   } catch {

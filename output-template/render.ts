@@ -15,6 +15,7 @@ import type { Brand } from './brand'
 import { primitivesCss } from './primitives'
 import {
   renderHero,
+  renderIntroSection,
   renderConfidentialityBar,
   renderFooter,
 } from './primitives/hero'
@@ -70,6 +71,7 @@ ${primitivesCss}
 <div id="pc">
 ${renderConfidentialityBar(brand)}
 ${renderHero(deck.sections.cover, brand)}
+${renderIntroSection(deck.sections.cover, brand)}
 <section class="secs"><div class="w">
 ${renderAccordion(deck, brand, slugMap, mode)}
 </div></section>
