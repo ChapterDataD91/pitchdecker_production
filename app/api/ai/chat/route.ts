@@ -210,7 +210,7 @@ async function handleStandardChat(
   sendEvent: (data: Record<string, unknown>) => void,
 ) {
   const response = await claude.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-opus-4-6',
     max_tokens: 4096,
     system: systemPrompt,
     tools,
@@ -275,7 +275,7 @@ async function handleCredentialsChat(
   while (iterations < MAX_TOOL_ITERATIONS) {
     // Use non-streaming for tool iterations, streaming only for the final response
     const response = await claude.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-opus-4-6',
       max_tokens: 4096,
       system: systemPrompt,
       tools,

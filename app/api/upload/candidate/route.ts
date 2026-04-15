@@ -167,7 +167,7 @@ export async function POST(request: Request) {
 
     const claude = getClaudeClient()
     const response = await claude.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-opus-4-6',
       max_tokens: 4096,
       system: SYSTEM_PROMPT + personaContext,
       tools: [PARSE_CV_TOOL],

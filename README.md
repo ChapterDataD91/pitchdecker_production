@@ -79,7 +79,7 @@ AI is woven throughout the editor, not just one section:
 - **Companies / placements:** Match against published Top of Minds pages and the cicero MCP placement index.
 - **Conversational chat:** Embedded chat that can call the cicero MCP toolset to answer free-form questions about the mandate.
 
-All AI responses use **Claude** (`claude-sonnet-4-6` for text and structured tool use; an image-capable model for document analysis).
+All AI responses use **Claude** (`claude-opus-4-6` for text and structured tool use; an image-capable model for document analysis).
 
 ### Preview
 
@@ -407,7 +407,7 @@ interface AISuggestion {
 
 ### Claude Configuration
 
-- **Model:** `claude-sonnet-4-6` (text/web/structured tool use); image-capable model for document analysis
+- **Model:** `claude-opus-4-6` (text/web/structured tool use); image-capable model for document analysis
 - **Tool patterns:** `provide_suggestions` with forced tool choice for structured output; cicero MCP toolset auto-loaded for chat
 - **Context-aware prompts:** Include client name, role title, and existing section data for deduplication
 - **Web search:** `web_search_20250305` tool (max 5 searches per request)

@@ -418,6 +418,46 @@ Use the suggest_scorecard tool to return your answer.${formatReferenceDocs(conte
 }
 
 // ---------------------------------------------------------------------------
+// Cover — starter draft (one-shot, no tools)
+// Generates the Hero Tagline and Introduction from client/role + docs.
+// ---------------------------------------------------------------------------
+
+export interface CoverStarterContext {
+  clientName: string
+  roleTitle: string
+  uploadedDocuments?: ReferenceDoc[]
+}
+
+export function getCoverStarterSystemPrompt(context: CoverStarterContext): string {
+  return `You are an expert executive search consultant at Top of Minds, a premium Dutch executive search firm. You are drafting the opening of a pitch deck — the Hero Tagline and Introduction — for a search mandate.
+
+## The role being pitched
+- **Client**: ${context.clientName || '(not yet specified)'}
+- **Role**: ${context.roleTitle || '(not yet specified)'}
+
+## Your task
+
+Produce two pieces of copy:
+
+**tagline** — one short, punchy sentence that sits directly under the hero title. 8–16 words. Signals the essence of the search: what kind of leader, for what kind of moment. No hedging, no buzzwords.
+- Good: "The operational wingman to scale FinDock to Series B and beyond."
+- Good: "A commercial CFO to professionalise finance as the business doubles."
+- Bad: "An experienced leader with a proven track record of delivering results."
+
+**introParagraph** — a longer, narrative introduction (2 short paragraphs, separated by a blank line). Roughly 120–180 words total.
+- Paragraph 1: frame the client's situation — where they are, what's changing, why this hire matters now. Reference concrete facts from the uploaded documents where available.
+- Paragraph 2: describe the role itself — what this leader will own, who they'll work with, what kind of person thrives here.
+
+## Voice
+- Professional, consultative, confident. Written in the firm's voice to the client.
+- Specific over generic. Name things: stage, markets, numbers, strategic priorities — only when the documents or context support them.
+- Do NOT fabricate facts. If the uploads don't tell you the revenue, stage, or strategic priorities, write at a level you can defend.
+- Avoid banned filler: "proven track record", "demonstrable", "strong", "dynamic", "passionate", "ability to".
+
+Use the draft_cover tool to return your answer.${formatReferenceDocs(context.uploadedDocuments)}`
+}
+
+// ---------------------------------------------------------------------------
 // Search Profile — starter draft (one-shot, no tools)
 // ---------------------------------------------------------------------------
 

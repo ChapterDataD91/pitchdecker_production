@@ -80,7 +80,7 @@ export async function POST(request: Request) {
     const systemPrompt = getTimelineSystemPrompt(body.deckContext)
 
     const response = await claude.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-opus-4-6',
       max_tokens: 4096,
       system: systemPrompt,
       tools: [SUGGEST_PHASES_TOOL],

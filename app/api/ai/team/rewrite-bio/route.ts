@@ -80,7 +80,7 @@ export async function POST(request: Request) {
 
     const claude = getClaudeClient()
     const response = await claude.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-opus-4-6',
       max_tokens: 1024,
       system: buildSystemPrompt(body),
       tools: [RETURN_BIO_TOOL],

@@ -25,6 +25,8 @@ export default async function PreviewPage({
     <PreviewShell
       deckId={id}
       deckTitle={`${deck.clientName || 'Untitled'} — ${deck.roleTitle || 'Proposal'}`}
+      clientName={deck.clientName || ''}
+      sectionStatuses={deck.sectionStatuses}
       mainHtml={result.html}
       candidates={result.candidates.map((c, i) => ({
         slug: c.slug,

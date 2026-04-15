@@ -3,8 +3,8 @@
 // Used by both the analyze-document API route and the document upload route.
 // ---------------------------------------------------------------------------
 
-import { PDFParse } from 'pdf-parse'
 import mammoth from 'mammoth'
+import { getClaudeClient } from './claude-client'
 
 const SUPPORTED_TEXT_EXTENSIONS = new Set(['pdf', 'docx', 'txt'])
 const SUPPORTED_IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp'])
@@ -53,10 +53,7 @@ export async function extractTextFromFile(
 ): Promise<string> {
   switch (extension) {
     case 'pdf': {
-      const parser = new PDFParse({ data: new Uint8Array(buffer) })
-      const textResult = await parser.getText()
-      await parser.destroy()
-      return textResult.text
+      return extractPdfWithClaude(buffer)
     }
     case 'docx': {
       const result = await mammoth.extractRawText({ buffer })
@@ -68,4 +65,41 @@ export async function extractTextFromFile(
     default:
       throw new Error(`Unsupported text file type: .${extension}`)
   }
+}
+
+// PDFs go to Claude as a native `document` block — preserves tables, columns,
+// and reads embedded graphics. Replaces the old pdf-parse/pdfjs path so we
+// don't ship pdfjs + @napi-rs/canvas on Linux.
+async function extractPdfWithClaude(buffer: Buffer): Promise<string> {
+  const claude = getClaudeClient()
+  const base64 = buffer.toString('base64')
+
+  const response = await claude.messages.create({
+    model: 'claude-opus-4-6',
+    max_tokens: 16_000,
+    system:
+      'You extract readable plain text from PDF documents. Preserve headings, lists, and the relative structure of tables. Do not summarize, do not add commentary — return only the document contents as Markdown-formatted plain text.',
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'document',
+            source: {
+              type: 'base64',
+              media_type: 'application/pdf',
+              data: base64,
+            },
+          },
+          { type: 'text', text: 'Return the full text of this document.' },
+        ],
+      },
+    ],
+  })
+
+  const textBlock = response.content.find((b) => b.type === 'text')
+  if (!textBlock || textBlock.type !== 'text') {
+    throw new Error('Claude returned no text content for PDF extraction')
+  }
+  return textBlock.text
 }
