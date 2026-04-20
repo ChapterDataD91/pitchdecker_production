@@ -1,13 +1,17 @@
 'use client'
 
-import { useRef, useState } from 'react'
 import { v4 } from 'uuid'
 import { motion, AnimatePresence } from 'framer-motion'
-import type { SearchProfileSection, Criterion, Weight } from '@/lib/types'
+import type { SearchProfileSection, Criterion } from '@/lib/types'
 import { useEditorStore } from '@/lib/store/editor-store'
 import { useAIStore } from '@/lib/store/ai-store'
 import LoadingDots from '@/components/ui/LoadingDots'
 import WeightSelector from '@/components/ui/WeightSelector'
+
+// The "Suggest starter profile" fetch and its loading/error/undo state live
+// in `ai-store` as a background task (key: `suggest-search-profile:{deckId}`)
+// so navigating to another section while it runs does not cancel it and the
+// indicator/undo banner remain when the user returns.
 
 interface SearchProfileEditorProps {
   data: SearchProfileSection
@@ -81,84 +85,39 @@ export default function SearchProfileEditor({
 }: SearchProfileEditorProps) {
   const data = normalize(rawData)
   const deck = useEditorStore((s) => s.deck)
-  const deckDocuments = useAIStore((s) => s.deckDocuments)
-  const [suggestLoading, setSuggestLoading] = useState(false)
-  const [suggestError, setSuggestError] = useState<string | null>(null)
-  const previousRef = useRef<SearchProfileSection | null>(null)
-  const [applied, setApplied] = useState(false)
+  const taskKey = deck ? `suggest-search-profile:${deck.id}` : null
+  const task = useAIStore((s) => (taskKey ? s.backgroundTasks[taskKey] : undefined))
+  const suggestSearchProfile = useAIStore((s) => s.suggestSearchProfile)
+  const undoSuggestSearchProfile = useAIStore((s) => s.undoSuggestSearchProfile)
+  const clearBackgroundTask = useAIStore((s) => s.clearBackgroundTask)
+
+  const suggestLoading = task?.status === 'running'
+  const suggestError = task?.status === 'error' ? (task.error ?? null) : null
+  const applied = task?.status === 'done' && task.undoData != null
 
   const empty = isSearchProfileEmpty(data)
 
-  function clearUndo() {
-    previousRef.current = null
-    setApplied(false)
-  }
-
-  async function handleSuggestStarter() {
-    if (!deck) return
-    setSuggestLoading(true)
-    setSuggestError(null)
-    try {
-      const cover = deck.sections.cover
-      const res = await fetch('/api/ai/search-profile/suggest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          deckContext: {
-            clientName: cover.clientName || deck.clientName,
-            roleTitle: cover.roleTitle || deck.roleTitle,
-            coverIntro: cover.introParagraph || undefined,
-            uploadedDocuments: deckDocuments.map((d) => ({
-              fileName: d.fileName,
-              extractedText: d.extractedText,
-            })),
-          },
-        }),
-      })
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || 'Failed to generate starter profile')
-      }
-      interface DraftResponse {
-        mustHaves: { text: string; weight: Weight }[]
-        niceToHaves: { text: string; weight: Weight }[]
-        personalityProfile: { intro: string; traits: string[] }
-      }
-      const draft = (await res.json()) as DraftResponse
-
-      previousRef.current = data
-      setApplied(true)
-      onChange({
-        mustHaves: draft.mustHaves.map((c) => ({
-          id: v4(),
-          text: c.text,
-          weight: c.weight,
-        })),
-        niceToHaves: draft.niceToHaves.map((c) => ({
-          id: v4(),
-          text: c.text,
-          weight: c.weight,
-        })),
-        personalityProfile: {
-          intro: draft.personalityProfile.intro,
-          traits: draft.personalityProfile.traits,
-        },
-      })
-    } catch (err) {
-      setSuggestError(err instanceof Error ? err.message : 'Unknown error')
-    } finally {
-      setSuggestLoading(false)
+  // Dismiss the undo banner when the user edits — a completed task's undo
+  // snapshot no longer represents a meaningful revert point. A running task
+  // is never cleared here; it will complete and write through on its own.
+  function dismissUndoBanner() {
+    if (taskKey && task?.status === 'done') {
+      clearBackgroundTask(taskKey)
     }
   }
 
+  function handleSuggestStarter() {
+    if (!deck) return
+    void suggestSearchProfile(deck.id)
+  }
+
   function undoApply() {
-    if (!previousRef.current) return
-    onChange(previousRef.current)
-    clearUndo()
+    if (!deck) return
+    undoSuggestSearchProfile(deck.id)
   }
 
   function addCriterion(column: 'mustHaves' | 'niceToHaves') {
-    clearUndo()
+    dismissUndoBanner()
     const newCriterion: Criterion = { id: v4(), text: '', weight: 3 }
     onChange({
       ...data,
@@ -167,7 +126,7 @@ export default function SearchProfileEditor({
   }
 
   function updateCriterion(column: 'mustHaves' | 'niceToHaves', updated: Criterion) {
-    clearUndo()
+    dismissUndoBanner()
     onChange({
       ...data,
       [column]: data[column].map((c) => (c.id === updated.id ? updated : c)),
@@ -175,7 +134,7 @@ export default function SearchProfileEditor({
   }
 
   function removeCriterion(column: 'mustHaves' | 'niceToHaves', id: string) {
-    clearUndo()
+    dismissUndoBanner()
     onChange({
       ...data,
       [column]: data[column].filter((c) => c.id !== id),
@@ -272,7 +231,7 @@ export default function SearchProfileEditor({
       {suggestError && <p className="text-xs text-red-600 px-1">{suggestError}</p>}
 
       <AnimatePresence>
-        {!empty && applied && previousRef.current && (
+        {!empty && applied && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}

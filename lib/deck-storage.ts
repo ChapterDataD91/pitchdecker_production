@@ -60,6 +60,8 @@ function isSectionComplete(deck: Deck, sectionId: SectionId): boolean {
     case 'timeline':
       return s.timeline.phases.length > 0
     case 'assessment':
+      // Explicitly excluded → counts as complete; publish won't block on it.
+      if (s.assessment.enabled === false) return true
       return (
         s.assessment.assessor.name.trim() !== '' &&
         s.assessment.pillars.length > 0 &&

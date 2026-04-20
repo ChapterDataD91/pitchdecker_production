@@ -8,10 +8,19 @@ import type {
   CandidateScore,
 } from '@/lib/types'
 import { useEditorStore } from '@/lib/store/editor-store'
+import { fetchWithRetry, mapLimit } from '@/lib/async/concurrency'
 import UploadZone from './candidates/UploadZone'
 import CandidateDetailPanel from './candidates/CandidateDetailPanel'
 import LoadingDots from '@/components/ui/LoadingDots'
 
+// Bound for parallel AI calls (CV parse, scoring). Sized to stay under
+// Anthropic's output-TPM ceiling on common tiers; fetchWithRetry backs off
+// if a burst still clips 429.
+const MAX_CONCURRENT_AI = 10
+
+// `onChange` is kept for interface parity with the section-editor router
+// but writes flow through editor-store actions so parallel fan-out does
+// not race on a stale render closure of `data.candidates`.
 interface CandidatesEditorProps {
   data: CandidatesSection
   onChange: (data: CandidatesSection) => void
@@ -51,25 +60,17 @@ function shortPersonaLabel(title: string): string {
   return title.replace(/^The\s+/i, '').toUpperCase()
 }
 
-function recomputeRankings(candidates: Candidate[]): Candidate[] {
-  const hasAnyScore = candidates.some((c) => c.overallScore > 0)
-  if (!hasAnyScore) return candidates
-  const sorted = [...candidates].sort((a, b) => b.overallScore - a.overallScore)
-  const rankById = new Map(
-    sorted.map((c, i) => [c.id, c.overallScore > 0 ? i + 1 : 0]),
-  )
-  return candidates.map((c) => ({ ...c, ranking: rankById.get(c.id) ?? 0 }))
-}
-
 // ---------------------------------------------------------------------------
 // Editor
 // ---------------------------------------------------------------------------
 
 export default function CandidatesEditor({
   data,
-  onChange,
 }: CandidatesEditorProps) {
   const deck = useEditorStore((s) => s.deck)
+  const appendCandidate = useEditorStore((s) => s.appendCandidate)
+  const patchCandidate = useEditorStore((s) => s.patchCandidate)
+  const removeCandidate = useEditorStore((s) => s.removeCandidate)
   const [pending, setPending] = useState<PendingUpload[]>([])
   const [scoringIds, setScoringIds] = useState<Set<string>>(new Set())
   const [scoreError, setScoreError] = useState<string | null>(null)
@@ -84,25 +85,10 @@ export default function CandidatesEditor({
     return new Map(sorted.map((p, i) => [p.id, i]))
   }, [personas])
 
-  function updateCandidate(id: string, patch: Partial<Candidate>) {
-    const next = data.candidates.map((c) =>
-      c.id === id ? { ...c, ...patch } : c,
-    )
-    onChange({ candidates: recomputeRankings(next) })
-  }
-
-  function removeCandidate(id: string) {
-    const next = data.candidates.filter((c) => c.id !== id)
-    onChange({ candidates: recomputeRankings(next) })
-  }
-
   // -- Upload --------------------------------------------------------------
-  //
-  // Multi-file upload previously raced: each parallel `uploadOne` captured
-  // `data.candidates` from the same render, so whoever resolved last
-  // overwrote the others' appends. Fix: a single local accumulator drives
-  // sequential uploads, so each completion appends to the running list
-  // rather than re-reading a stale closure.
+  // Files are parsed in parallel up to MAX_CONCURRENT_AI. Each worker writes
+  // its result via `appendCandidate`, which reads the candidates array from
+  // store state at write time — no stale-closure race between workers.
 
   async function handleFiles(files: File[]) {
     // Show all pending skeletons up-front so the UI reflects intent.
@@ -112,12 +98,8 @@ export default function CandidatesEditor({
       ...files.map((f, i) => ({ tempId: tempIds[i], fileName: f.name })),
     ])
 
-    let working = [...data.candidates]
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
+    await mapLimit(files, MAX_CONCURRENT_AI, async (file, i) => {
       const tempId = tempIds[i]
-
       try {
         const fd = new FormData()
         fd.append('file', file)
@@ -125,7 +107,7 @@ export default function CandidatesEditor({
           fd.append('personas', JSON.stringify(personas))
         }
 
-        const res = await fetch('/api/upload/candidate', {
+        const res = await fetchWithRetry('/api/upload/candidate', {
           method: 'POST',
           body: fd,
         })
@@ -138,8 +120,7 @@ export default function CandidatesEditor({
         }
 
         const { candidate } = (await res.json()) as { candidate: Candidate }
-        working = [...working, candidate]
-        onChange({ candidates: recomputeRankings(working) })
+        appendCandidate(candidate)
         setPending((p) => p.filter((x) => x.tempId !== tempId))
       } catch (err) {
         setPending((p) =>
@@ -150,7 +131,7 @@ export default function CandidatesEditor({
           ),
         )
       }
-    }
+    })
   }
 
   function dismissPending(tempId: string) {
@@ -158,6 +139,10 @@ export default function CandidatesEditor({
   }
 
   // -- Scoring -------------------------------------------------------------
+  // Each `scoreOne` call writes atomically via `patchCandidate` (store state
+  // read at write time). `scoreAll` fans out unscored candidates through
+  // `mapLimit(MAX_CONCURRENT_AI)` — workers update their own entry in the
+  // scoringIds set and the candidate array without racing each other.
 
   async function scoreOne(candidate: Candidate) {
     if (!deck) return
@@ -175,7 +160,7 @@ export default function CandidatesEditor({
     setScoreError(null)
     setScoringIds((s) => new Set(s).add(candidate.id))
     try {
-      const res = await fetch('/api/ai/candidate/score', {
+      const res = await fetchWithRetry('/api/ai/candidate/score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -198,14 +183,14 @@ export default function CandidatesEditor({
         }),
       })
       if (!res.ok) {
-        const err = await res.json()
+        const err = await res.json().catch(() => ({}))
         throw new Error(err.error || 'Scoring failed')
       }
       const { scores, overallScore } = (await res.json()) as {
         scores: CandidateScore[]
         overallScore: number
       }
-      updateCandidate(candidate.id, {
+      patchCandidate(candidate.id, {
         scores,
         overallScore,
         status: 'scored',
@@ -221,12 +206,6 @@ export default function CandidatesEditor({
     }
   }
 
-  // scoreAll walks through unscored candidates sequentially, but it cannot
-  // delegate to scoreOne because scoreOne's updateCandidate reads
-  // data.candidates from the stale render closure — after the first iteration
-  // succeeds, every subsequent updateCandidate would compute `next` from the
-  // pre-click snapshot and overwrite earlier results. Same bug pattern the
-  // upload path already solved by accumulating into a local working array.
   async function scoreAll() {
     if (!deck) return
     const scorecard = deck.sections.scorecard
@@ -241,58 +220,8 @@ export default function CandidatesEditor({
     }
     setScoreError(null)
 
-    let working = [...data.candidates]
-    const unscored = working.filter((c) => c.overallScore === 0)
-
-    for (const target of unscored) {
-      setScoringIds((s) => new Set(s).add(target.id))
-      try {
-        const res = await fetch('/api/ai/candidate/score', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            candidate: {
-              name: target.name,
-              summary: target.summary,
-              currentRole: target.currentRole,
-              currentCompany: target.currentCompany,
-              careerHistory: target.careerHistory,
-              education: target.education,
-              languages: target.languages,
-              rawCvText: target.rawCvText,
-            },
-            scorecard,
-            deckContext: {
-              clientName: deck.sections.cover.clientName || deck.clientName,
-              roleTitle: deck.sections.cover.roleTitle || deck.roleTitle,
-              coverIntro: deck.sections.cover.introParagraph || undefined,
-            },
-          }),
-        })
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}))
-          throw new Error(err.error || 'Scoring failed')
-        }
-        const { scores, overallScore } = (await res.json()) as {
-          scores: CandidateScore[]
-          overallScore: number
-        }
-        working = working.map((c) =>
-          c.id === target.id
-            ? { ...c, scores, overallScore, status: 'scored' as const }
-            : c,
-        )
-        onChange({ candidates: recomputeRankings(working) })
-      } catch (err) {
-        setScoreError(err instanceof Error ? err.message : 'Scoring failed')
-      } finally {
-        setScoringIds((s) => {
-          const next = new Set(s)
-          next.delete(target.id)
-          return next
-        })
-      }
-    }
+    const unscored = data.candidates.filter((c) => c.overallScore === 0)
+    await mapLimit(unscored, MAX_CONCURRENT_AI, (target) => scoreOne(target))
   }
 
   // -- Render --------------------------------------------------------------
@@ -358,7 +287,7 @@ export default function CandidatesEditor({
             personaIndex={c.personaId ? personaIndexById.get(c.personaId) ?? null : null}
             scoring={scoringIds.has(c.id)}
             onOpen={() => setSelectedId(c.id)}
-            onChangePersona={(personaId) => updateCandidate(c.id, { personaId })}
+            onChangePersona={(personaId) => patchCandidate(c.id, { personaId })}
             onScore={() => scoreOne(c)}
             onRemove={() => removeCandidate(c.id)}
           />
@@ -381,7 +310,7 @@ export default function CandidatesEditor({
           scoring={selectedId !== null && scoringIds.has(selectedId)}
           onClose={() => setSelectedId(null)}
           onChange={(patch) => {
-            if (selectedId) updateCandidate(selectedId, patch)
+            if (selectedId) patchCandidate(selectedId, patch)
           }}
           onRescore={() => {
             const c = data.candidates.find((x) => x.id === selectedId)

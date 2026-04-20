@@ -18,7 +18,7 @@ import type {
 import type { SectionId } from '@/lib/theme'
 import { SECTIONS } from '@/lib/theme'
 import { useEditorStore } from './editor-store'
-import type { DeckSections } from '@/lib/types'
+import type { DeckSections, SearchProfileSection, Weight } from '@/lib/types'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -44,6 +44,30 @@ function savePanelWidth(width: number): void {
   } catch {
     // silently fail
   }
+}
+
+// ---------------------------------------------------------------------------
+// Background tasks
+//
+// Long-running AI work (Suggest Search Profile, CV scoring, etc.) is tracked
+// here rather than inside a section component's local state, so the task
+// survives the user navigating between sections. Keyed by a stable string
+// like `suggest-search-profile:${deckId}` — duplicate starts are rejected
+// while `status === 'running'`.
+//
+// Each task kind owns the shape of `undoData`; the section that consumes
+// the task is responsible for casting it correctly.
+// ---------------------------------------------------------------------------
+
+export type BackgroundTaskKind = 'suggest-search-profile'
+
+export interface BackgroundTask {
+  kind: BackgroundTaskKind
+  status: 'running' | 'done' | 'error'
+  error?: string
+  startedAt: number
+  finishedAt?: number
+  undoData?: unknown
 }
 
 interface AIState {
@@ -73,6 +97,9 @@ interface AIState {
   deckDocuments: DeckDocument[]
   isLoadingDocuments: boolean
   isUploadingDocument: boolean
+
+  // Background tasks — see header comment above
+  backgroundTasks: Record<string, BackgroundTask>
 }
 
 interface AIActions {
@@ -119,6 +146,21 @@ interface AIActions {
   uploadDocument: (deckId: string, file: File) => Promise<DeckDocument | null>
   removeDocument: (deckId: string, docId: string) => Promise<void>
   addDocumentToStore: (doc: DeckDocument) => void
+
+  // ---- Background tasks --------------------------------------------------
+  // Generic: lifecycle wrapper. Dedupes on `running`; catches errors; records
+  // optional undoData returned by the work function. Use for any async AI
+  // task that should survive the user navigating between sections.
+  runBackgroundTask: (
+    key: string,
+    kind: BackgroundTaskKind,
+    fn: () => Promise<{ undoData?: unknown } | void>,
+  ) => Promise<void>
+  clearBackgroundTask: (key: string) => void
+
+  // Specific: starter search-profile draft. Writes directly to editor-store.
+  suggestSearchProfile: (deckId: string) => Promise<void>
+  undoSuggestSearchProfile: (deckId: string) => void
 }
 
 type AIStore = AIState & AIActions
@@ -182,6 +224,9 @@ export const useAIStore = create<AIStore>((set, get) => ({
   deckDocuments: [],
   isLoadingDocuments: false,
   isUploadingDocument: false,
+
+  // -- Background tasks state --
+  backgroundTasks: {},
 
   // -- Panel actions --
   togglePanel: () => set((s) => ({ panelOpen: !s.panelOpen })),
@@ -475,4 +520,127 @@ export const useAIStore = create<AIStore>((set, get) => ({
 
   addDocumentToStore: (doc) =>
     set((s) => ({ deckDocuments: [doc, ...s.deckDocuments] })),
+
+  // -- Background tasks --------------------------------------------------
+  // Generic lifecycle wrapper. Records running → done/error, captures
+  // errors, stores optional undoData. Rejects duplicate starts while
+  // the same key is still running.
+  runBackgroundTask: async (key, kind, fn) => {
+    const existing = get().backgroundTasks[key]
+    if (existing?.status === 'running') return
+
+    set((s) => ({
+      backgroundTasks: {
+        ...s.backgroundTasks,
+        [key]: { kind, status: 'running', startedAt: Date.now() },
+      },
+    }))
+
+    try {
+      const result = (await fn()) ?? {}
+      set((s) => ({
+        backgroundTasks: {
+          ...s.backgroundTasks,
+          [key]: {
+            ...s.backgroundTasks[key],
+            status: 'done',
+            finishedAt: Date.now(),
+            undoData: result.undoData,
+          },
+        },
+      }))
+    } catch (err) {
+      set((s) => ({
+        backgroundTasks: {
+          ...s.backgroundTasks,
+          [key]: {
+            ...s.backgroundTasks[key],
+            status: 'error',
+            error: err instanceof Error ? err.message : 'Unknown error',
+            finishedAt: Date.now(),
+          },
+        },
+      }))
+    }
+  },
+
+  clearBackgroundTask: (key) =>
+    set((s) => {
+      if (!(key in s.backgroundTasks)) return s
+      const next = { ...s.backgroundTasks }
+      delete next[key]
+      return { backgroundTasks: next }
+    }),
+
+  // Starter search-profile draft. Fetches the suggestion, writes it into
+  // editor-store so it lands regardless of which section is currently
+  // mounted, and stashes the previous section shape for Undo.
+  suggestSearchProfile: async (deckId) => {
+    const key = `suggest-search-profile:${deckId}`
+    await get().runBackgroundTask(key, 'suggest-search-profile', async () => {
+      const deck = useEditorStore.getState().deck
+      if (!deck) throw new Error('No deck loaded')
+
+      const cover = deck.sections.cover
+      const previousSection = deck.sections.searchProfile
+      const deckDocuments = get().deckDocuments
+
+      const res = await fetch('/api/ai/search-profile/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deckContext: {
+            clientName: cover.clientName || deck.clientName,
+            roleTitle: cover.roleTitle || deck.roleTitle,
+            coverIntro: cover.introParagraph || undefined,
+            uploadedDocuments: deckDocuments.map((d) => ({
+              fileName: d.fileName,
+              extractedText: d.extractedText,
+            })),
+          },
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to generate starter profile')
+      }
+
+      interface DraftResponse {
+        mustHaves: { text: string; weight: Weight }[]
+        niceToHaves: { text: string; weight: Weight }[]
+        personalityProfile: { intro: string; traits: string[] }
+      }
+      const draft = (await res.json()) as DraftResponse
+
+      useEditorStore.getState().updateSection('searchProfile', {
+        mustHaves: draft.mustHaves.map((c) => ({
+          id: v4(),
+          text: c.text,
+          weight: c.weight,
+        })),
+        niceToHaves: draft.niceToHaves.map((c) => ({
+          id: v4(),
+          text: c.text,
+          weight: c.weight,
+        })),
+        personalityProfile: {
+          intro: draft.personalityProfile.intro,
+          traits: draft.personalityProfile.traits,
+        },
+      })
+
+      return { undoData: previousSection }
+    })
+  },
+
+  undoSuggestSearchProfile: (deckId) => {
+    const key = `suggest-search-profile:${deckId}`
+    const task = get().backgroundTasks[key]
+    if (!task || task.status !== 'done' || !task.undoData) return
+
+    useEditorStore
+      .getState()
+      .updateSection('searchProfile', task.undoData as SearchProfileSection)
+    get().clearBackgroundTask(key)
+  },
 }))

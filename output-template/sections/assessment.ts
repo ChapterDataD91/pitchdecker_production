@@ -119,6 +119,13 @@ export function renderAssessment(data: AssessmentSection, _brand: Brand): string
   // Suppress the avatar primitive's unused-import warning when no real content
   void renderAvatar
 
+  // Explicitly excluded from this deck — in preview we show a calm note so the
+  // consultant sees their decision; in publish the layout skips this section
+  // entirely via the `skipInPublish` hook.
+  if (data.enabled === false) {
+    return `<div class="ot-empty">Assessment is not included in this deck.</div>`
+  }
+
   const noContent =
     !data.assessor.name.trim() &&
     data.pillars.length === 0 &&

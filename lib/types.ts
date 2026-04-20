@@ -229,6 +229,14 @@ export interface AssessmentMtBlock {
 }
 
 export interface AssessmentSection {
+  /**
+   * Whether this deck includes an assessment step at all. When `false` the
+   * section is skipped in the published output and the editor collapses to a
+   * simple "not included" state. The underlying content is preserved so
+   * re-enabling restores what was there. Old decks without this field are
+   * treated as enabled (check with `enabled !== false`).
+   */
+  enabled: boolean
   assessor: AssessmentAssessor
   /** Display name of the assessment provider, e.g. "Hogan", "SHL". */
   providerName: string
@@ -529,6 +537,7 @@ export function createEmptyDeck(
       confidentialityNote: '',
     },
     assessment: {
+      enabled: true,
       assessor: {
         name: '',
         title: '',

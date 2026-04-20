@@ -5,9 +5,22 @@ import { v4 as uuid } from 'uuid'
 import type { CredentialsSection, CredentialAxis, Placement } from '@/lib/types'
 import { useEditorStore } from '@/lib/store/editor-store'
 import { useAIStore } from '@/lib/store/ai-store'
+import { fetchWithRetry, mapLimit } from '@/lib/async/concurrency'
 import LoadingDots from '@/components/ui/LoadingDots'
 import ClientList from '@/components/editor/sections/credentials/ClientList'
 import type { ClientPlacement } from '@/app/api/ai/credentials/find-placements/route'
+
+// Per-axis find-placements state. Lifted to the parent so a single
+// "Find for all axes" fan-out can drive every card in parallel and the
+// toolbar can show aggregate progress.
+interface AxisSearchState {
+  clients: ClientPlacement[]
+  loading: boolean
+  error: string | null
+  showClients: boolean
+}
+
+const MAX_CONCURRENT_AI = 10
 
 interface CredentialsEditorProps {
   data: CredentialsSection
@@ -35,6 +48,89 @@ export default function CredentialsEditor({ data, onChange }: CredentialsEditorP
   const deckDocuments = useAIStore((s) => s.deckDocuments)
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [suggestError, setSuggestError] = useState<string | null>(null)
+  const [axisSearch, setAxisSearch] = useState<Record<string, AxisSearchState>>({})
+
+  const deckContext = useMemo(
+    () => ({
+      clientName: deck?.sections.cover.clientName || deck?.clientName || '',
+      roleTitle: deck?.sections.cover.roleTitle || deck?.roleTitle || '',
+      coverIntro: deck?.sections.cover.introParagraph || undefined,
+    }),
+    [deck],
+  )
+
+  const anyAxisSearching = useMemo(
+    () => Object.values(axisSearch).some((s) => s.loading),
+    [axisSearch],
+  )
+
+  // Fetch placements for a single axis. Writes go through a functional
+  // setAxisSearch so concurrent workers don't clobber each other's loading
+  // or error state.
+  async function searchAxis(axis: CredentialAxis) {
+    if (!axis.name.trim()) return
+    setAxisSearch((s) => ({
+      ...s,
+      [axis.id]: {
+        clients: s[axis.id]?.clients ?? [],
+        loading: true,
+        error: null,
+        showClients: true,
+      },
+    }))
+    try {
+      const res = await fetchWithRetry('/api/ai/credentials/find-placements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ axis, deckContext }),
+      })
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(payload.error ?? 'Request failed')
+      }
+      const result = (await res.json()) as { clients: ClientPlacement[] }
+      setAxisSearch((s) => ({
+        ...s,
+        [axis.id]: {
+          clients: result.clients ?? [],
+          loading: false,
+          error: null,
+          showClients: true,
+        },
+      }))
+    } catch (err) {
+      setAxisSearch((s) => ({
+        ...s,
+        [axis.id]: {
+          clients: s[axis.id]?.clients ?? [],
+          loading: false,
+          error: err instanceof Error ? err.message : 'Unknown error',
+          showClients: s[axis.id]?.showClients ?? false,
+        },
+      }))
+    }
+  }
+
+  // Fan out find-placements across every named axis. fetchWithRetry inside
+  // searchAxis handles 429s, so a burst that clips Anthropic's ceiling
+  // self-throttles instead of surfacing as per-axis errors.
+  async function searchAllAxes() {
+    const namedAxes = data.axes.filter((a) => a.name.trim())
+    if (namedAxes.length === 0) return
+    await mapLimit(namedAxes, MAX_CONCURRENT_AI, (axis) => searchAxis(axis))
+  }
+
+  function setAxisShowClients(axisId: string, show: boolean) {
+    setAxisSearch((s) => ({
+      ...s,
+      [axisId]: {
+        clients: s[axisId]?.clients ?? [],
+        loading: s[axisId]?.loading ?? false,
+        error: s[axisId]?.error ?? null,
+        showClients: show,
+      },
+    }))
+  }
 
   function updateAxes(axes: CredentialAxis[]) {
     onChange({ ...data, axes })
@@ -205,20 +301,47 @@ export default function CredentialsEditor({ data, onChange }: CredentialsEditorP
   }
 
   // Populated state — axis cards
+  const namedAxisCount = data.axes.filter((a) => a.name.trim()).length
+  const searchingCount = Object.values(axisSearch).filter((s) => s.loading).length
+
   return (
     <div className="space-y-5">
+      {/* Toolbar: fan-out find-placements across all named axes */}
+      {namedAxisCount > 1 && (
+        <div className="flex items-center justify-between rounded-lg border border-border bg-bg-subtle px-4 py-2.5">
+          <span className="text-xs text-text-secondary">
+            {anyAxisSearching
+              ? `Searching ${searchingCount} of ${namedAxisCount} axes…`
+              : `Search placements for all ${namedAxisCount} axes at once`}
+          </span>
+          <button
+            type="button"
+            onClick={searchAllAxes}
+            disabled={anyAxisSearching}
+            className="text-xs font-medium text-accent hover:text-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+          >
+            {anyAxisSearching ? (
+              <>
+                <LoadingDots />
+                <span>Searching…</span>
+              </>
+            ) : (
+              <span>Find placements for all axes</span>
+            )}
+          </button>
+        </div>
+      )}
+
       {data.axes.map((axis, index) => (
         <AxisCard
           key={axis.id}
           axis={axis}
           index={index}
-          deckContext={{
-            clientName: deck?.sections.cover.clientName || deck?.clientName || '',
-            roleTitle: deck?.sections.cover.roleTitle || deck?.roleTitle || '',
-            coverIntro: deck?.sections.cover.introParagraph || undefined,
-          }}
+          searchState={axisSearch[axis.id]}
           onUpdate={(patch) => updateAxis(axis.id, patch)}
           onRemove={() => removeAxis(axis.id)}
+          onSearch={() => searchAxis(axis)}
+          onSetShowClients={(show) => setAxisShowClients(axis.id, show)}
         />
       ))}
 
@@ -261,51 +384,31 @@ export default function CredentialsEditor({ data, onChange }: CredentialsEditorP
 interface AxisCardProps {
   axis: CredentialAxis
   index: number
-  deckContext: {
-    clientName: string
-    roleTitle: string
-    coverIntro?: string
-  }
+  searchState: AxisSearchState | undefined
   onUpdate: (patch: Partial<CredentialAxis>) => void
   onRemove: () => void
+  onSearch: () => void | Promise<void>
+  onSetShowClients: (show: boolean) => void
 }
 
-function AxisCard({ axis, index, deckContext, onUpdate, onRemove }: AxisCardProps) {
-  const [clients, setClients] = useState<ClientPlacement[]>([])
-  const [searchLoading, setSearchLoading] = useState(false)
-  const [searchError, setSearchError] = useState<string | null>(null)
-  const [showClients, setShowClients] = useState(false)
+function AxisCard({
+  axis,
+  index,
+  searchState,
+  onUpdate,
+  onRemove,
+  onSearch,
+  onSetShowClients,
+}: AxisCardProps) {
+  const clients = searchState?.clients ?? []
+  const searchLoading = searchState?.loading ?? false
+  const searchError = searchState?.error ?? null
+  const showClients = searchState?.showClients ?? false
 
   const acceptedIds = useMemo(
     () => new Set(axis.placements.map((p) => p.placementId).filter(Boolean) as string[]),
     [axis.placements],
   )
-
-  async function handleFindPlacements() {
-    setSearchLoading(true)
-    setSearchError(null)
-    setShowClients(true)
-
-    try {
-      const res = await fetch('/api/ai/credentials/find-placements', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ axis, deckContext }),
-      })
-
-      if (!res.ok) {
-        const payload = (await res.json().catch(() => ({}))) as { error?: string }
-        throw new Error(payload.error ?? 'Request failed')
-      }
-
-      const result = (await res.json()) as { clients: ClientPlacement[] }
-      setClients(result.clients || [])
-    } catch (err) {
-      setSearchError(err instanceof Error ? err.message : 'Unknown error')
-    } finally {
-      setSearchLoading(false)
-    }
-  }
 
   function handleAcceptClient(client: ClientPlacement) {
     const placementId = uuid()
@@ -469,7 +572,7 @@ function AxisCard({ axis, index, deckContext, onUpdate, onRemove }: AxisCardProp
               <p className="text-xs font-medium text-text-secondary">Client placements</p>
               <button
                 type="button"
-                onClick={() => setShowClients(false)}
+                onClick={() => onSetShowClients(false)}
                 className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
               >
                 Hide list
@@ -486,7 +589,7 @@ function AxisCard({ axis, index, deckContext, onUpdate, onRemove }: AxisCardProp
           <div className="flex items-center justify-center gap-2 py-2">
             <button
               type="button"
-              onClick={handleFindPlacements}
+              onClick={() => onSearch()}
               disabled={searchLoading || !axis.name}
               className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-text-secondary hover:text-accent hover:border-accent hover:bg-accent-light transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -498,7 +601,7 @@ function AxisCard({ axis, index, deckContext, onUpdate, onRemove }: AxisCardProp
             {clients.length > 0 && (
               <button
                 type="button"
-                onClick={() => setShowClients(true)}
+                onClick={() => onSetShowClients(true)}
                 className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-text-tertiary hover:text-text-secondary transition-colors"
               >
                 Show {clients.length - acceptedIds.size} remaining clients

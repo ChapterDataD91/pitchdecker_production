@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import { create } from 'zustand'
-import type { Deck, DeckSections, SectionStatus } from '@/lib/types'
+import type { Candidate, Deck, DeckSections, SectionStatus } from '@/lib/types'
 import type { SectionId } from '@/lib/theme'
 import { SECTIONS } from '@/lib/theme'
 
@@ -28,6 +28,12 @@ interface EditorActions {
     sectionKey: K,
     data: Partial<DeckSections[K]>,
   ) => void
+  // Atomic candidate writers — each reads the current candidates array from
+  // store state at write time, so concurrent fan-out (parallel CV parse,
+  // parallel scoring) does not race on a stale React render closure.
+  appendCandidate: (candidate: Candidate) => void
+  patchCandidate: (id: string, patch: Partial<Candidate>) => void
+  removeCandidate: (id: string) => void
   setActiveSection: (sectionId: SectionId) => void
   setSaveStatus: (status: SaveStatus) => void
   setLoading: (loading: boolean) => void
@@ -44,6 +50,21 @@ type EditorStore = EditorState & EditorActions
 // ---------------------------------------------------------------------------
 
 const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+// ---------------------------------------------------------------------------
+// Candidate ranking — re-applied after every atomic write so the list stays
+// sorted by overallScore. Unscored candidates get ranking 0.
+// ---------------------------------------------------------------------------
+
+function recomputeRankings(candidates: Candidate[]): Candidate[] {
+  const hasAnyScore = candidates.some((c) => c.overallScore > 0)
+  if (!hasAnyScore) return candidates
+  const sorted = [...candidates].sort((a, b) => b.overallScore - a.overallScore)
+  const rankById = new Map(
+    sorted.map((c, i) => [c.id, c.overallScore > 0 ? i + 1 : 0]),
+  )
+  return candidates.map((c) => ({ ...c, ranking: rankById.get(c.id) ?? 0 }))
+}
 
 // ---------------------------------------------------------------------------
 // Section status computation
@@ -74,6 +95,9 @@ function computeSectionStatus(deck: Deck, sectionId: SectionId): SectionStatus {
       return s.timeline.phases.length > 0 ? 'complete' : 'empty'
     case 'assessment': {
       const a = s.assessment
+      // Explicitly excluded counts as complete — the consultant has made a
+      // deliberate decision not to offer an assessment step.
+      if (a.enabled === false) return 'complete'
       const hasAny =
         a.assessor.name.trim() !== '' ||
         a.pillars.length > 0 ||
@@ -175,6 +199,36 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     }, 500)
 
     debounceTimers.set(timerKey, timer)
+  },
+
+  appendCandidate: (candidate) => {
+    const { deck, updateSection } = get()
+    if (!deck) return
+    const next = recomputeRankings([
+      ...deck.sections.candidates.candidates,
+      candidate,
+    ])
+    updateSection('candidates', { candidates: next })
+  },
+
+  patchCandidate: (id, patch) => {
+    const { deck, updateSection } = get()
+    if (!deck) return
+    const next = recomputeRankings(
+      deck.sections.candidates.candidates.map((c) =>
+        c.id === id ? { ...c, ...patch } : c,
+      ),
+    )
+    updateSection('candidates', { candidates: next })
+  },
+
+  removeCandidate: (id) => {
+    const { deck, updateSection } = get()
+    if (!deck) return
+    const next = recomputeRankings(
+      deck.sections.candidates.candidates.filter((c) => c.id !== id),
+    )
+    updateSection('candidates', { candidates: next })
   },
 
   setActiveSection: (sectionId) => set({ activeSection: sectionId }),

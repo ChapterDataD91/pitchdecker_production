@@ -33,6 +33,13 @@ interface AccordionSectionDef {
   anchorId?: string
   /** Optional class added to the .sb body wrapper, e.g. "sb--centered" for Fee. */
   bodyClassExtra?: string
+  /**
+   * Optional per-section opt-out check. When this returns true in publish
+   * mode the section is omitted entirely from the output (no accordion item).
+   * Preview mode ignores this hook — the renderer decides how to show the
+   * excluded state so the consultant sees their decision reflected.
+   */
+  skipInPublish?: (deck: Deck) => boolean
   render: (deck: Deck, brand: Brand, slugMap: Map<string, string>) => string
 }
 
@@ -66,6 +73,7 @@ export const ACCORDION_SECTIONS: AccordionSectionDef[] = [
     id: 'assessment',
     title: 'Assessment',
     anchorId: 'assessment',
+    skipInPublish: (deck) => deck.sections.assessment.enabled === false,
     render: (deck, brand) => renderAssessment(deck.sections.assessment, brand),
   },
   {
@@ -113,6 +121,7 @@ export function renderAccordion(
   for (const section of ACCORDION_SECTIONS) {
     const status = statuses[section.id]
     if (mode === 'publish' && status === 'empty') continue
+    if (mode === 'publish' && section.skipInPublish?.(deck)) continue
 
     visibleNumber++
     let body: string

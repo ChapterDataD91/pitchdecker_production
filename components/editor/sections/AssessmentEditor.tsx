@@ -2,7 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import type { AssessmentSection, AssessmentPillar, TeamMember } from '@/lib/types'
+import type {
+  AssessmentSection,
+  AssessmentPillar,
+  ConsultantSummary,
+  TeamMember,
+} from '@/lib/types'
 import { useEditorStore } from '@/lib/store/editor-store'
 
 interface AssessmentEditorProps {
@@ -15,6 +20,7 @@ interface AssessmentEditorProps {
 // ---------------------------------------------------------------------------
 
 const HOGAN_TEMPLATE: AssessmentSection = {
+  enabled: true,
   assessor: {
     name: 'Marlies Hoogvliet',
     title: 'Certified Hogan Leadership Assessor',
@@ -82,6 +88,26 @@ function findAssessorPhoto(assessorName: string, team: TeamMember[]): string {
   return match?.photoUrl ?? ''
 }
 
+// Fall back to the firm-wide consultants directory when the assessor isn't in
+// the deck's Team section (common case for Marlies: she's the assessor, not a
+// search-team member). Resolves to '' on any failure so the UI simply falls
+// back to initials.
+async function lookupConsultantPhoto(name: string): Promise<string> {
+  const target = name.trim().toLowerCase()
+  if (!target) return ''
+  try {
+    const res = await fetch(`/api/consultants?q=${encodeURIComponent(name)}`)
+    if (!res.ok) return ''
+    const consultants = (await res.json()) as ConsultantSummary[]
+    const match = consultants.find(
+      (c) => c.name.trim().toLowerCase() === target && c.photoUrl,
+    )
+    return match?.photoUrl ?? ''
+  } catch {
+    return ''
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -91,6 +117,9 @@ export default function AssessmentEditor({ data, onChange }: AssessmentEditorPro
   const [templateApplied, setTemplateApplied] = useState(false)
   const team = useEditorStore((s) => s.deck?.sections.team)
 
+  // Treat old decks (no `enabled` field) as enabled. Only explicit false means
+  // the consultant opted out of offering an assessment in this deck.
+  const enabled = data.enabled !== false
   const empty = isEmpty(data)
 
   // Backfill the assessor photo when the name matches a known team member.
@@ -113,17 +142,46 @@ export default function AssessmentEditor({ data, onChange }: AssessmentEditorPro
     previousRef.current = data
     setTemplateApplied(true)
     const teamMembers = [...(team?.leadTeam ?? []), ...(team?.network ?? [])]
-    const photoUrl = findAssessorPhoto(HOGAN_TEMPLATE.assessor.name, teamMembers)
+    const localPhoto = findAssessorPhoto(HOGAN_TEMPLATE.assessor.name, teamMembers)
     onChange({
       ...HOGAN_TEMPLATE,
-      assessor: { ...HOGAN_TEMPLATE.assessor, photoUrl },
+      assessor: { ...HOGAN_TEMPLATE.assessor, photoUrl: localPhoto },
     })
+
+    // Not found in the deck's own team — look her up in the firm-wide
+    // consultants directory and patch the photo in when it returns. Guard
+    // against the user editing the assessor name in the meantime by reading
+    // the latest store state at patch time.
+    if (!localPhoto) {
+      const targetName = HOGAN_TEMPLATE.assessor.name
+      void lookupConsultantPhoto(targetName).then((fetched) => {
+        if (!fetched) return
+        const current = useEditorStore.getState().deck?.sections.assessment
+        if (!current) return
+        if (current.assessor.name.trim() !== targetName.trim()) return
+        if (current.assessor.photoUrl.trim() !== '') return
+        onChange({
+          ...current,
+          assessor: { ...current.assessor, photoUrl: fetched },
+        })
+      })
+    }
   }
 
   function undoApply() {
     if (!previousRef.current) return
     onChange(previousRef.current)
     clearUndo()
+  }
+
+  function excludeAssessment() {
+    clearUndo()
+    onChange({ ...data, enabled: false })
+  }
+
+  function includeAssessment() {
+    clearUndo()
+    onChange({ ...data, enabled: true })
   }
 
   // -- Assessor ----------------------------------------------------------
@@ -176,9 +234,36 @@ export default function AssessmentEditor({ data, onChange }: AssessmentEditorPro
 
   // -- Render ------------------------------------------------------------
 
-  if (empty) {
+  if (!enabled) {
     return (
       <div className="space-y-4">
+        <div className="rounded-lg border border-border bg-bg-subtle p-6 flex items-start gap-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-bg-muted">
+            <svg className="h-4 w-4 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-text">Assessment not included in this deck</p>
+            <p className="mt-1 text-xs text-text-secondary">
+              The assessment step will be omitted from the published deck. Any content you had is preserved — include it again to restore.
+            </p>
+            <button
+              type="button"
+              onClick={includeAssessment}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium text-text hover:border-accent hover:text-accent transition-colors"
+            >
+              Include assessment
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (empty) {
+    return (
+      <div className="space-y-3">
         <button
           type="button"
           onClick={applyTemplate}
@@ -198,6 +283,14 @@ export default function AssessmentEditor({ data, onChange }: AssessmentEditorPro
           <svg className="h-5 w-5 text-text-tertiary group-hover:text-accent transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
           </svg>
+        </button>
+
+        <button
+          type="button"
+          onClick={excludeAssessment}
+          className="block mx-auto text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+        >
+          Don&apos;t offer assessment in this deck
         </button>
       </div>
     )
@@ -397,8 +490,15 @@ export default function AssessmentEditor({ data, onChange }: AssessmentEditorPro
         />
       </section>
 
-      {/* Re-apply template (secondary) */}
-      <div className="flex justify-end">
+      {/* Secondary actions */}
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={excludeAssessment}
+          className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+        >
+          Exclude from deck
+        </button>
         <button
           type="button"
           onClick={applyTemplate}
