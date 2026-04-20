@@ -2,10 +2,14 @@
 // Typed wrappers around the Cicero MCP deployment tools.
 //
 // Exports:
-//   - publishDeckArtifacts(clientName, files)  → deployPitchdeck
-//   - updateDeckArtifacts(token, files)        → updatePitchdeck (revoked/expired
-//                                                classified so the caller can
-//                                                gracefully fall back to deploy)
+//   - publishDeckArtifacts(clientName, files)    → deploy_pitchdeck
+//   - updateDeckArtifacts(token, files)          → update_pitchdeck (revoked/expired
+//                                                  classified so the caller can
+//                                                  gracefully fall back to deploy)
+//   - rollbackDeployment(token, version)         → rollback_pitchdeck
+//   - revokeDeployment(token)                    → revoke_pitchdeck
+//   - renameDeployment(token, newClientName)     → rename_pitchdeck
+//   - listDeployments()                          → list_pitchdecks
 //
 // Each cicero tool returns a JSON-stringified payload as the first text
 // content block (see /Users/daan/cicero_mcp/src/tools/*.ts).
@@ -134,13 +138,28 @@ async function uploadFilesToSas(
   }
 }
 
-function classifyUpdateError(error: string): UpdateDeckResult & { ok: false } {
+export type ManagementErrorReason =
+  | 'revoked'
+  | 'expired'
+  | 'not_found'
+  | 'invalid_version'
+  | 'unknown'
+
+function classifyError(error: string): ManagementErrorReason {
   const lower = error.toLowerCase()
-  let reason: 'revoked' | 'expired' | 'not_found' | 'unknown' = 'unknown'
-  if (lower.includes('revoked')) reason = 'revoked'
-  else if (lower.includes('expired') || lower.includes('has expired')) reason = 'expired'
-  else if (lower.includes('not found')) reason = 'not_found'
-  return { ok: false, reason, error }
+  if (lower.includes('revoked')) return 'revoked'
+  if (lower.includes('expired')) return 'expired'
+  if (lower.includes('not found') || lower.includes('permission')) return 'not_found'
+  if (lower.includes('invalid version')) return 'invalid_version'
+  return 'unknown'
+}
+
+function classifyUpdateError(error: string): UpdateDeckResult & { ok: false } {
+  const reason = classifyError(error)
+  // UpdateDeckResult doesn't include 'invalid_version' — fold it into 'unknown'.
+  const narrowed: 'revoked' | 'expired' | 'not_found' | 'unknown' =
+    reason === 'invalid_version' ? 'unknown' : reason
+  return { ok: false, reason: narrowed, error }
 }
 
 function validateFiles(files: readonly PublishFile[], fnName: string): void {
@@ -244,4 +263,175 @@ export async function updateDeckArtifacts(
     version,
     expiresAt: expires_at,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Management operations — rollback, revoke, rename
+// ---------------------------------------------------------------------------
+
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export type ManagementResult<Extra = {}> =
+  | ({ ok: true } & Extra)
+  | { ok: false; reason: ManagementErrorReason; error: string }
+
+interface RollbackResponseOk {
+  success: true
+  version: number
+  latest_version: number
+  viewer_url: string
+  client_name: string
+  message: string
+}
+
+interface RevokeResponseOk {
+  success: true
+  token: string
+  client_name: string
+  message: string
+}
+
+interface RenameResponseOk {
+  success: true
+  token: string
+  client_name: string
+  message: string
+}
+
+interface ManagementResponseErr {
+  success: false
+  error: string
+}
+
+/**
+ * Roll the live viewer back to an earlier version (cicero updates blob_prefix).
+ * Previous versions remain in blob storage — nothing is destroyed.
+ */
+export async function rollbackDeployment(
+  token: string,
+  version: number,
+): Promise<ManagementResult<{ version: number; latestVersion: number }>> {
+  const cicero = await getCiceroClient()
+  const toolResult = await cicero.callTool({
+    name: 'rollback_pitchdeck',
+    arguments: { token, version },
+  })
+  const payload = parseToolResultJson<RollbackResponseOk | ManagementResponseErr>(
+    toolResult,
+    'rollback_pitchdeck',
+  )
+  if (payload.success === false) {
+    return { ok: false, reason: classifyError(payload.error), error: payload.error }
+  }
+  return { ok: true, version: payload.version, latestVersion: payload.latest_version }
+}
+
+/**
+ * Permanently revoke access to the deployment. Irreversible from the MCP's
+ * side — a new publish has to mint a fresh token + PIN.
+ */
+export async function revokeDeployment(
+  token: string,
+): Promise<ManagementResult> {
+  const cicero = await getCiceroClient()
+  const toolResult = await cicero.callTool({
+    name: 'revoke_pitchdeck',
+    arguments: { token },
+  })
+  const payload = parseToolResultJson<RevokeResponseOk | ManagementResponseErr>(
+    toolResult,
+    'revoke_pitchdeck',
+  )
+  if (payload.success === false) {
+    return { ok: false, reason: classifyError(payload.error), error: payload.error }
+  }
+  return { ok: true }
+}
+
+/**
+ * Rename the client label on the deployment. Changes only cicero's stored
+ * client_name (shown on the PIN page and in listPitchdecks). Does not touch
+ * the published deck content — callers that want to sync deck.clientName
+ * should do that separately.
+ */
+export async function renameDeployment(
+  token: string,
+  newClientName: string,
+): Promise<ManagementResult<{ clientName: string }>> {
+  const cicero = await getCiceroClient()
+  const toolResult = await cicero.callTool({
+    name: 'rename_pitchdeck',
+    arguments: { token, new_client_name: newClientName },
+  })
+  const payload = parseToolResultJson<RenameResponseOk | ManagementResponseErr>(
+    toolResult,
+    'rename_pitchdeck',
+  )
+  if (payload.success === false) {
+    return { ok: false, reason: classifyError(payload.error), error: payload.error }
+  }
+  return { ok: true, clientName: payload.client_name }
+}
+
+// ---------------------------------------------------------------------------
+// List deployments — used for reconciliation
+// ---------------------------------------------------------------------------
+
+export interface DeploymentSummary {
+  token: string
+  clientName: string
+  viewerUrl: string
+  status: 'active' | 'revoked' | 'expired'
+  version: number
+  expiresAt: string
+  createdAt: string
+  lastAccessed: string | null
+  accessCount: number
+}
+
+interface ListPitchdecksResponse {
+  total: number
+  pitchdecks: Array<{
+    token: string
+    client_name: string
+    viewer_url: string
+    status: string
+    current_version: number
+    expires_at: string
+    created_at: string
+    last_accessed: string | null
+    access_count: number
+  }>
+}
+
+function normaliseStatus(s: string): 'active' | 'revoked' | 'expired' {
+  if (s === 'revoked' || s === 'expired') return s
+  return 'active'
+}
+
+/**
+ * Lists all deployments the calling principal can see. In HTTP auth mode
+ * cicero filters to decks created by that principal; in stdio/dev mode it
+ * returns everything. Used for reconciliation on preview open.
+ */
+export async function listDeployments(): Promise<DeploymentSummary[]> {
+  const cicero = await getCiceroClient()
+  const toolResult = await cicero.callTool({
+    name: 'list_pitchdecks',
+    arguments: {},
+  })
+  const payload = parseToolResultJson<ListPitchdecksResponse>(
+    toolResult,
+    'list_pitchdecks',
+  )
+  return payload.pitchdecks.map((p) => ({
+    token: p.token,
+    clientName: p.client_name,
+    viewerUrl: p.viewer_url,
+    status: normaliseStatus(p.status),
+    version: p.current_version || 1,
+    expiresAt: p.expires_at,
+    createdAt: p.created_at,
+    lastAccessed: p.last_accessed,
+    accessCount: p.access_count,
+  }))
 }

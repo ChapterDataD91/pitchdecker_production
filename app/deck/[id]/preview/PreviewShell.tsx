@@ -17,6 +17,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import Toast from '@/components/ui/Toast'
 import LoadingDots from '@/components/ui/LoadingDots'
 import PublishModal, { type PublishMode } from '@/components/ui/PublishModal'
+import DeploymentMenu from '@/components/ui/DeploymentMenu'
 import { SECTIONS, type SectionId } from '@/lib/theme'
 import type { PublishedDeployment, SectionStatuses } from '@/lib/types'
 
@@ -60,13 +61,20 @@ export default function PreviewShell({
   candidates,
   publishedDeployment,
 }: PreviewShellProps) {
-  const hasActiveDeployment = publishedDeployment?.status === 'active'
   const router = useRouter()
   const [view, setView] = useState<View>({ kind: 'main' })
 
   const [publishStatus, setPublishStatus] = useState<PublishStatus>('idle')
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null)
-  const [toast, setToast] = useState<{ message: string; type: 'error' | 'info' } | null>(null)
+  const [toast, setToast] = useState<{ message: string; type: 'error' | 'info' | 'success' } | null>(null)
+
+  // Local copies so management actions update the header without a full
+  // server-component refresh. Seeded from server props on mount.
+  const [currentDeployment, setCurrentDeployment] = useState<PublishedDeployment | undefined>(
+    publishedDeployment,
+  )
+  const [currentClientName, setCurrentClientName] = useState(clientName)
+  const hasActiveDeployment = currentDeployment?.status === 'active'
 
   const { completeCount, totalCount, emptyLabels } = useMemo(() => {
     const total = SECTIONS.length
@@ -136,6 +144,9 @@ export default function PreviewShell({
         version: body.version ?? 1,
         replaced: body.replaced,
       })
+      if (body.publishedDeployment) {
+        setCurrentDeployment(body.publishedDeployment as PublishedDeployment)
+      }
       setPublishStatus('done')
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Publish failed'
@@ -147,6 +158,113 @@ export default function PreviewShell({
   function closeModal() {
     setPublishResult(null)
     setPublishStatus('idle')
+  }
+
+  // --- Management actions ---------------------------------------------------
+
+  async function postDeploymentAction<T>(
+    path: 'rollback' | 'revoke' | 'rename' | 'sync',
+    body?: unknown,
+  ): Promise<T> {
+    const res = await fetch(`/api/deck/${deckId}/deployment/${path}`, {
+      method: 'POST',
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    })
+    const json = await res.json()
+    if (!res.ok) {
+      throw new Error(json?.message || json?.error || `${path} failed`)
+    }
+    return json as T
+  }
+
+  async function handleRollback(version: number) {
+    try {
+      const json = await postDeploymentAction<{
+        publishedDeployment: PublishedDeployment
+      }>('rollback', { version })
+      setCurrentDeployment(json.publishedDeployment)
+      setToast({
+        message: `Rolled back to v${version}. Viewers see the previous version immediately.`,
+        type: 'success',
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Rollback failed'
+      setToast({ message: `Couldn't roll back: ${message}`, type: 'error' })
+    }
+  }
+
+  async function handleRevoke() {
+    try {
+      const json = await postDeploymentAction<{
+        publishedDeployment: PublishedDeployment
+      }>('revoke')
+      setCurrentDeployment(json.publishedDeployment)
+      setToast({
+        message: 'Access revoked. Share a new deployment if needed.',
+        type: 'success',
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Revoke failed'
+      setToast({ message: `Couldn't revoke: ${message}`, type: 'error' })
+    }
+  }
+
+  async function handleSync() {
+    try {
+      const json = await postDeploymentAction<{
+        changed: boolean
+        drifted: Array<'version' | 'status' | 'expiresAt' | 'clientName'>
+        publishedDeployment: PublishedDeployment
+      }>('sync')
+      setCurrentDeployment(json.publishedDeployment)
+      if (!json.changed) {
+        setToast({ message: 'Already in sync with the server.', type: 'info' })
+      } else {
+        const labelMap: Record<string, string> = {
+          version: 'version',
+          status: 'status',
+          expiresAt: 'expiry',
+          clientName: 'client name',
+        }
+        const labels = json.drifted.map((d) => labelMap[d] ?? d)
+        const joined =
+          labels.length === 1
+            ? labels[0]
+            : labels.length === 2
+              ? `${labels[0]} and ${labels[1]}`
+              : `${labels.slice(0, -1).join(', ')}, and ${labels[labels.length - 1]}`
+        setToast({ message: `Synced — updated ${joined}.`, type: 'success' })
+        // clientName drift affects SSR-baked strings; nudge the server.
+        if (json.drifted.includes('clientName')) {
+          router.refresh()
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Sync failed'
+      setToast({ message: `Couldn't sync: ${message}`, type: 'error' })
+    }
+  }
+
+  async function handleRename(newClientName: string) {
+    try {
+      const json = await postDeploymentAction<{
+        clientName: string
+        publishedDeployment: PublishedDeployment
+      }>('rename', { clientName: newClientName })
+      setCurrentDeployment(json.publishedDeployment)
+      setCurrentClientName(json.clientName)
+      setToast({
+        message: `Renamed to "${json.clientName}".`,
+        type: 'success',
+      })
+      // Nudge the server component to re-render the deck title and any cover
+      // references that were baked into the initial SSR.
+      router.refresh()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Rename failed'
+      setToast({ message: `Couldn't rename: ${message}`, type: 'error' })
+    }
   }
 
   return (
@@ -210,6 +328,17 @@ export default function PreviewShell({
             onClick={handlePublish}
             idleLabel={hasActiveDeployment ? 'Republish' : 'Publish deck'}
           />
+
+          {currentDeployment && (
+            <DeploymentMenu
+              deployment={currentDeployment}
+              clientName={currentClientName}
+              onRollback={handleRollback}
+              onRename={handleRename}
+              onRevoke={handleRevoke}
+              onSync={handleSync}
+            />
+          )}
         </div>
       </header>
 
@@ -223,7 +352,7 @@ export default function PreviewShell({
 
       <PublishModal
         result={publishResult}
-        clientName={clientName}
+        clientName={currentClientName}
         onClose={closeModal}
       />
 

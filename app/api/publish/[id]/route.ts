@@ -102,6 +102,7 @@ export async function POST(
         return NextResponse.json({
           success: true,
           mode: 'update',
+          publishedDeployment: nextDeployment,
           viewerUrl: nextDeployment.viewerUrl,
           pin: nextDeployment.pin,
           version: nextDeployment.version,
@@ -168,6 +169,7 @@ export async function POST(
     success: true,
     mode: 'first',
     replaced,
+    publishedDeployment: newDeployment,
     viewerUrl: newDeployment.viewerUrl,
     pin: newDeployment.pin,
     version: newDeployment.version,

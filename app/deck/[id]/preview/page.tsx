@@ -7,6 +7,7 @@
 
 import { notFound } from 'next/navigation'
 import { deckStorage } from '@/lib/deck-storage'
+import { reconcileDeployment, needsReconcile } from '@/lib/deployment-sync'
 import { renderDeck } from '@/output-template'
 import { SECTIONS } from '@/lib/theme'
 import type { SectionStatuses } from '@/lib/types'
@@ -18,8 +19,27 @@ export default async function PreviewPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const deck = await deckStorage.get(id)
+  let deck = await deckStorage.get(id)
   if (!deck) notFound()
+
+  // If the deck has a deployment and it hasn't been synced recently, ask
+  // cicero what the current state is. Keeps the Manage menu (rollback /
+  // revoke) from acting on stale version numbers when a Claude Desktop user
+  // has touched the same deck out-of-band. Best-effort: an MCP outage
+  // shouldn't prevent the preview from rendering.
+  if (needsReconcile(deck.publishedDeployment)) {
+    try {
+      const report = await reconcileDeployment(deck)
+      if (report?.changed) {
+        // Refetch so derived fields (clientName etc.) reflect the patch.
+        const refreshed = await deckStorage.get(id)
+        if (refreshed) deck = refreshed
+      }
+    } catch {
+      // Swallow and proceed with the stored deck. The user can still hit
+      // "Sync with server" from the DeploymentMenu if they need to retry.
+    }
+  }
 
   const result = renderDeck(deck, { mode: 'preview' })
 
