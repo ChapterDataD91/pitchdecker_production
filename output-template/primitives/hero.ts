@@ -26,7 +26,7 @@ export const heroCss = `
 .hero-logo { width: 56px; height: 56px; display: block; margin-bottom: 28px; flex-shrink: 0; }
 .hero-left { flex: 0 0 50%; display: flex; flex-direction: column; justify-content: center; padding: 64px 56px; }
 .hero-right { flex: 0 0 40%; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-.hero-right img { width: 100%; height: 100%; object-fit: contain; object-position: center; display: block; }
+.hero-right img { width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; }
 .hero-right .hero-placeholder {
   width: 100%; height: 100%; min-height: 520px;
   background: linear-gradient(135deg, var(--bg2), var(--bg));
@@ -89,6 +89,7 @@ export const heroCss = `
 /* Full-width banner image, with the signature clip-path */
 .hero-banner {
   position: relative; width: 100%;
+  background: var(--bg);
   clip-path: polygon(0 calc(100vw * 0.0875), 100% 0, 100% calc(100% - 100vw * 0.0875), 0 100%);
 }
 .hero-banner img {
