@@ -185,6 +185,32 @@ export default function DashboardPage() {
                             {deck.status === 'draft' ? 'Draft' : deck.status === 'in-progress' ? 'In Progress' : 'Complete'}
                           </span>
 
+                          {/* Published-deployment badge */}
+                          {deck.publishedDeployment && (
+                            <span
+                              className={`rounded-md px-2 py-0.5 text-xs font-medium ${
+                                deck.publishedDeployment.status === 'active'
+                                  ? 'bg-success-light text-success'
+                                  : deck.publishedDeployment.status === 'revoked'
+                                    ? 'bg-error-light text-error'
+                                    : 'bg-warning-light text-warning'
+                              }`}
+                              title={
+                                deck.publishedDeployment.status === 'active'
+                                  ? `Published · v${deck.publishedDeployment.version}`
+                                  : deck.publishedDeployment.status === 'revoked'
+                                    ? 'Revoked — access disabled'
+                                    : 'Expired — link no longer works'
+                              }
+                            >
+                              {deck.publishedDeployment.status === 'active'
+                                ? `Published v${deck.publishedDeployment.version}`
+                                : deck.publishedDeployment.status === 'revoked'
+                                  ? 'Revoked'
+                                  : 'Expired'}
+                            </span>
+                          )}
+
                           {/* Date */}
                           <span className="hidden text-xs text-text-tertiary sm:inline">
                             {formatDate(deck.updatedAt)}

@@ -96,8 +96,11 @@ function computeSectionStatus(deck: Deck, sectionId: SectionId): SectionStatus {
     }
     case 'candidates':
       return s.candidates.candidates.length > 0 ? 'complete' : 'empty'
-    case 'fee':
-      return s.fee.amount > 0 ? 'complete' : 'empty'
+    case 'fee': {
+      const hasFee =
+        s.fee.feeMode === 'percentage' ? s.fee.percentage > 0 : s.fee.amount > 0
+      return hasFee ? 'complete' : 'empty'
+    }
     default:
       return 'empty'
   }

@@ -1,17 +1,18 @@
 'use client'
 
 // ---------------------------------------------------------------------------
-// Fee editor — full form wiring for the flat-fee shape.
+// Fee editor — form wiring for flat or percentage fee.
 //
-// Fields: amount, currency, vatNote, instalments[{label, trigger}],
-// guaranteeMonths, guaranteeNote, addons[{label, amount, description}].
+// Fields: feeMode, amount | (percentage + percentageBasis), currency, vatNote,
+// instalments[{label, trigger}], guaranteeMonths, guaranteeNote,
+// addons[{label, amount, description}].
 //
 // Each field pushes the updated section through `onChange` on blur / change;
 // the parent section-level auto-save debouncer handles persistence.
 // ---------------------------------------------------------------------------
 
 import { useState } from 'react'
-import type { FeeSection, FeeInstalment, FeeAddon } from '@/lib/types'
+import type { FeeSection, FeeInstalment, FeeAddon, FeeMode } from '@/lib/types'
 
 interface FeeEditorProps {
   data: FeeSection
@@ -39,12 +40,23 @@ function formatAmount(n: number): string {
 }
 
 export default function FeeEditor({ data, onChange }: FeeEditorProps) {
+  // Back-compat: old decks may not have feeMode set.
+  const feeMode: FeeMode = data.feeMode ?? 'flat'
+
   // Local amount text lets the user type commas / spaces without fighting
   // the formatter on every keystroke. We commit the parsed number on blur.
   const [amountText, setAmountText] = useState<string>(formatAmount(data.amount))
+  const [percentageText, setPercentageText] = useState<string>(
+    data.percentage > 0 ? String(data.percentage) : '',
+  )
 
   function update<K extends keyof FeeSection>(key: K, value: FeeSection[K]) {
     onChange({ ...data, [key]: value })
+  }
+
+  function setFeeMode(mode: FeeMode) {
+    if (mode === feeMode) return
+    onChange({ ...data, feeMode: mode })
   }
 
   function addInstalment() {
@@ -79,59 +91,155 @@ export default function FeeEditor({ data, onChange }: FeeEditorProps) {
     )
   }
 
+  const currencySymbol =
+    data.currency === 'EUR' ? '€' : data.currency === 'GBP' ? '£' : data.currency === 'USD' ? '$' : ''
+
   return (
     <div className="space-y-5">
-      {/* Fee amount + currency + VAT note */}
-      <div className="grid grid-cols-[1fr_auto_1fr] gap-3">
-        <div>
-          <label className="block text-sm font-medium text-text mb-1.5">
-            Fee Amount
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              inputMode="numeric"
-              placeholder="100,000"
-              value={amountText}
-              onChange={(e) => setAmountText(e.target.value)}
-              onBlur={() => {
-                const parsed = parseAmount(amountText)
-                setAmountText(formatAmount(parsed))
-                if (parsed !== data.amount) update('amount', parsed)
-              }}
-              className="w-full rounded-md border border-border bg-bg px-3 py-2.5 pl-8 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-            />
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
-              €
-            </span>
-          </div>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-text mb-1.5">
-            Currency
-          </label>
-          <input
-            type="text"
-            placeholder="EUR"
-            value={data.currency}
-            onChange={(e) => update('currency', e.target.value.toUpperCase())}
-            maxLength={3}
-            className="w-20 rounded-md border border-border bg-bg px-3 py-2.5 text-sm text-text uppercase placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-text mb-1.5">
-            VAT Note
-          </label>
-          <input
-            type="text"
-            placeholder="excl. VAT"
-            value={data.vatNote}
-            onChange={(e) => update('vatNote', e.target.value)}
-            className="w-full rounded-md border border-border bg-bg px-3 py-2.5 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-          />
+      {/* Fee mode toggle */}
+      <div>
+        <label className="block text-sm font-medium text-text mb-1.5">
+          Fee Type
+        </label>
+        <div
+          role="tablist"
+          aria-label="Fee type"
+          className="inline-flex rounded-md border border-border bg-bg p-0.5"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={feeMode === 'flat'}
+            onClick={() => setFeeMode('flat')}
+            className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+              feeMode === 'flat'
+                ? 'bg-accent text-white'
+                : 'text-text-secondary hover:text-text'
+            }`}
+          >
+            Flat fee
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={feeMode === 'percentage'}
+            onClick={() => setFeeMode('percentage')}
+            className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+              feeMode === 'percentage'
+                ? 'bg-accent text-white'
+                : 'text-text-secondary hover:text-text'
+            }`}
+          >
+            Percentage
+          </button>
         </div>
       </div>
+
+      {/* Fee amount / percentage + currency + VAT note */}
+      {feeMode === 'flat' ? (
+        <div className="grid grid-cols-[1fr_auto_1fr] gap-3">
+          <div>
+            <label className="block text-sm font-medium text-text mb-1.5">
+              Fee Amount
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="100,000"
+                value={amountText}
+                onChange={(e) => setAmountText(e.target.value)}
+                onBlur={() => {
+                  const parsed = parseAmount(amountText)
+                  setAmountText(formatAmount(parsed))
+                  if (parsed !== data.amount) update('amount', parsed)
+                }}
+                className="w-full rounded-md border border-border bg-bg px-3 py-2.5 pl-8 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+              />
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
+                {currencySymbol || '€'}
+              </span>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-1.5">
+              Currency
+            </label>
+            <input
+              type="text"
+              placeholder="EUR"
+              value={data.currency}
+              onChange={(e) => update('currency', e.target.value.toUpperCase())}
+              maxLength={3}
+              className="w-20 rounded-md border border-border bg-bg px-3 py-2.5 text-sm text-text uppercase placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-1.5">
+              VAT Note
+            </label>
+            <input
+              type="text"
+              placeholder="excl. VAT"
+              value={data.vatNote}
+              onChange={(e) => update('vatNote', e.target.value)}
+              className="w-full rounded-md border border-border bg-bg px-3 py-2.5 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-[auto_1fr_1fr] gap-3">
+          <div>
+            <label className="block text-sm font-medium text-text mb-1.5">
+              Percentage
+            </label>
+            <div className="relative w-32">
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="30"
+                value={percentageText}
+                onChange={(e) => setPercentageText(e.target.value)}
+                onBlur={() => {
+                  const raw = percentageText.replace(',', '.').replace(/[^\d.]/g, '')
+                  const n = raw === '' ? 0 : parseFloat(raw)
+                  const clamped = Number.isFinite(n) && n >= 0 ? Math.min(n, 100) : 0
+                  setPercentageText(clamped > 0 ? String(clamped) : '')
+                  if (clamped !== data.percentage) update('percentage', clamped)
+                }}
+                className="w-full rounded-md border border-border bg-bg px-3 py-2.5 pr-9 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-text-tertiary">
+                %
+              </span>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-1.5">
+              Of
+            </label>
+            <input
+              type="text"
+              placeholder="first-year total compensation"
+              value={data.percentageBasis ?? ''}
+              onChange={(e) => update('percentageBasis', e.target.value)}
+              className="w-full rounded-md border border-border bg-bg px-3 py-2.5 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-1.5">
+              VAT Note
+            </label>
+            <input
+              type="text"
+              placeholder="excl. VAT"
+              value={data.vatNote}
+              onChange={(e) => update('vatNote', e.target.value)}
+              className="w-full rounded-md border border-border bg-bg px-3 py-2.5 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Instalments */}
       <div>

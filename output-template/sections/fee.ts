@@ -25,15 +25,28 @@ function joinSentence(items: string[]): string {
   return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`
 }
 
+function formatPercentage(value: number): string {
+  // Strip trailing .0 so "30" stays "30%" and "12.5" stays "12.5%"
+  const rounded = Math.round(value * 100) / 100
+  return `${rounded}%`
+}
+
 function renderFeeLine(data: FeeSection): string {
-  const money = formatMoney(data.amount, data.currency)
   const vat = data.vatNote.trim() ? ` (${esc(data.vatNote)})` : ''
+  const isPercentage = data.feeMode === 'percentage'
+  const priceLabel = isPercentage
+    ? (() => {
+        const basis = data.percentageBasis?.trim() || 'first-year total compensation'
+        return `${formatPercentage(data.percentage)} of ${basis}`
+      })()
+    : formatMoney(data.amount, data.currency)
+
   const triggers = data.instalments
     .map((i: FeeInstalment) => i.trigger.trim())
     .filter(Boolean)
 
   if (triggers.length === 0) {
-    return `<p><strong>Search fee:</strong> The fee of ${esc(money)}${vat}.</p>`
+    return `<p><strong>Search fee:</strong> The fee of ${esc(priceLabel)}${vat}.</p>`
   }
 
   const numWord =
@@ -44,7 +57,7 @@ function renderFeeLine(data: FeeSection): string {
         : triggers.length === 4
           ? 'four'
           : `${triggers.length}`
-  return `<p><strong>Search fee:</strong> The fee of ${esc(money)}${vat} is invoiced in ${esc(numWord)} equal instalments: ${esc(joinSentence(triggers))}.</p>`
+  return `<p><strong>Search fee:</strong> The fee of ${esc(priceLabel)}${vat} is invoiced in ${esc(numWord)} equal instalments: ${esc(joinSentence(triggers))}.</p>`
 }
 
 function renderGuaranteeLine(data: FeeSection): string {
@@ -73,7 +86,9 @@ function renderAddonLine(addon: FeeAddon, currency: string, vatNote: string): st
 }
 
 export function renderFee(data: FeeSection, _brand: Brand): string {
-  if (data.amount <= 0) {
+  const hasFee =
+    data.feeMode === 'percentage' ? data.percentage > 0 : data.amount > 0
+  if (!hasFee) {
     return `<div class="ot-empty">No fee details captured yet.</div>`
   }
 

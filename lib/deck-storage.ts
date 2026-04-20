@@ -77,7 +77,7 @@ function isSectionComplete(deck: Deck, sectionId: SectionId): boolean {
     case 'candidates':
       return s.candidates.candidates.length > 0
     case 'fee':
-      return s.fee.amount > 0
+      return s.fee.feeMode === 'percentage' ? s.fee.percentage > 0 : s.fee.amount > 0
     default:
       return false
   }
@@ -91,6 +91,12 @@ function toSummary(deck: Deck): DeckSummary {
     status: deck.status,
     completedSections: computeCompletedSections(deck),
     updatedAt: deck.updatedAt,
+    publishedDeployment: deck.publishedDeployment
+      ? {
+          status: deck.publishedDeployment.status,
+          version: deck.publishedDeployment.version,
+        }
+      : undefined,
   }
 }
 

@@ -1,8 +1,9 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import type { AssessmentSection, AssessmentPillar } from '@/lib/types'
+import type { AssessmentSection, AssessmentPillar, TeamMember } from '@/lib/types'
+import { useEditorStore } from '@/lib/store/editor-store'
 
 interface AssessmentEditorProps {
   data: AssessmentSection
@@ -74,6 +75,13 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
+function findAssessorPhoto(assessorName: string, team: TeamMember[]): string {
+  const target = assessorName.trim().toLowerCase()
+  if (!target) return ''
+  const match = team.find((m) => m.name.trim().toLowerCase() === target && m.photoUrl)
+  return match?.photoUrl ?? ''
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -81,8 +89,20 @@ function getInitials(name: string): string {
 export default function AssessmentEditor({ data, onChange }: AssessmentEditorProps) {
   const previousRef = useRef<AssessmentSection | null>(null)
   const [templateApplied, setTemplateApplied] = useState(false)
+  const team = useEditorStore((s) => s.deck?.sections.team)
 
   const empty = isEmpty(data)
+
+  // Backfill the assessor photo when the name matches a known team member.
+  // Handles decks where the Hogan template was applied before this was wired up.
+  useEffect(() => {
+    if (!team) return
+    if (data.assessor.photoUrl.trim() !== '') return
+    if (data.assessor.name.trim() === '') return
+    const photoUrl = findAssessorPhoto(data.assessor.name, [...team.leadTeam, ...team.network])
+    if (!photoUrl) return
+    onChange({ ...data, assessor: { ...data.assessor, photoUrl } })
+  }, [team, data, onChange])
 
   function clearUndo() {
     previousRef.current = null
@@ -92,7 +112,12 @@ export default function AssessmentEditor({ data, onChange }: AssessmentEditorPro
   function applyTemplate() {
     previousRef.current = data
     setTemplateApplied(true)
-    onChange(HOGAN_TEMPLATE)
+    const teamMembers = [...(team?.leadTeam ?? []), ...(team?.network ?? [])]
+    const photoUrl = findAssessorPhoto(HOGAN_TEMPLATE.assessor.name, teamMembers)
+    onChange({
+      ...HOGAN_TEMPLATE,
+      assessor: { ...HOGAN_TEMPLATE.assessor, photoUrl },
+    })
   }
 
   function undoApply() {

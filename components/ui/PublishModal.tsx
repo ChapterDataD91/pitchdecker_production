@@ -3,10 +3,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 
+export type PublishMode = 'first' | 'update'
+
 interface PublishResult {
   viewerUrl: string
   pin: string
   expiresInDays: number
+  mode: PublishMode
+  version: number
+  replaced?: boolean
 }
 
 interface PublishModalProps {
@@ -120,10 +125,18 @@ export default function PublishModal({
               </span>
               <div>
                 <h2 className="text-base font-semibold text-text">
-                  Deck published
+                  {result.mode === 'update'
+                    ? `Republished · v${result.version}`
+                    : result.replaced
+                      ? 'New deployment published'
+                      : 'Deck published'}
                 </h2>
                 <p className="mt-0.5 text-sm text-text-secondary">
-                  Share the link and PIN with {clientName || 'the client'}.
+                  {result.mode === 'update'
+                    ? 'Same link and PIN — viewers see the new version on next load.'
+                    : result.replaced
+                      ? `Previous link retired. Share the new link and PIN with ${clientName || 'the client'}.`
+                      : `Share the link and PIN with ${clientName || 'the client'}.`}
                 </p>
               </div>
             </div>

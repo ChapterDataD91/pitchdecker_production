@@ -362,9 +362,18 @@ export interface FeeAddon {
   description: string
 }
 
+/** How the search fee is priced — a flat amount or a percentage of compensation. */
+export type FeeMode = 'flat' | 'percentage'
+
 export interface FeeSection {
-  /** Flat fee amount in `currency` units (e.g. 100000 = €100,000) */
+  /** Pricing mode. 'flat' → `amount` is used; 'percentage' → `percentage` + `percentageBasis`. */
+  feeMode: FeeMode
+  /** Flat fee amount in `currency` units (e.g. 100000 = €100,000). Used when feeMode === 'flat'. */
   amount: number
+  /** Percentage value (e.g. 30 = 30%). Used when feeMode === 'percentage'. */
+  percentage: number
+  /** What the percentage applies to, e.g. "first-year total compensation". */
+  percentageBasis: string
   /** ISO 4217 currency code, default 'EUR' */
   currency: string
   /** VAT/tax disclaimer, e.g. "excl. VAT" */
@@ -404,6 +413,24 @@ export interface DeckSections {
 export type SectionStatuses = Record<SectionId, SectionStatus>
 
 // ---------------------------------------------------------------------------
+// Published deployment (cicero MCP)
+// ---------------------------------------------------------------------------
+
+export type DeploymentStatus = 'active' | 'revoked' | 'expired'
+
+export interface PublishedDeployment {
+  token: string
+  pin: string
+  viewerUrl: string
+  version: number
+  status: DeploymentStatus
+  expiresAt: string
+  firstPublishedAt: string
+  lastPublishedAt: string
+  lastSyncedAt?: string
+}
+
+// ---------------------------------------------------------------------------
 // Deck (full document)
 // ---------------------------------------------------------------------------
 
@@ -416,6 +443,7 @@ export interface Deck {
   status: DeckStatus
   sectionStatuses: SectionStatuses
   sections: DeckSections
+  publishedDeployment?: PublishedDeployment
 }
 
 // ---------------------------------------------------------------------------
@@ -429,6 +457,7 @@ export interface DeckSummary {
   status: DeckStatus
   completedSections: number
   updatedAt: string
+  publishedDeployment?: { status: DeploymentStatus; version: number }
 }
 
 // ---------------------------------------------------------------------------
@@ -528,7 +557,10 @@ export function createEmptyDeck(
       hardFactorsGateNote: '',
     },
     fee: {
+      feeMode: 'flat',
       amount: 0,
+      percentage: 0,
+      percentageBasis: 'first-year total compensation',
       currency: 'EUR',
       vatNote: 'excl. VAT',
       instalments: [],

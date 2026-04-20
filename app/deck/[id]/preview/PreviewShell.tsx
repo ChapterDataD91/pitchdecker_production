@@ -16,9 +16,9 @@ import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import Toast from '@/components/ui/Toast'
 import LoadingDots from '@/components/ui/LoadingDots'
-import PublishModal from '@/components/ui/PublishModal'
+import PublishModal, { type PublishMode } from '@/components/ui/PublishModal'
 import { SECTIONS, type SectionId } from '@/lib/theme'
-import type { SectionStatuses } from '@/lib/types'
+import type { PublishedDeployment, SectionStatuses } from '@/lib/types'
 
 interface CandidateEntry {
   slug: string
@@ -30,6 +30,9 @@ interface PublishResult {
   viewerUrl: string
   pin: string
   expiresInDays: number
+  mode: PublishMode
+  version: number
+  replaced?: boolean
 }
 
 interface PreviewShellProps {
@@ -39,6 +42,7 @@ interface PreviewShellProps {
   sectionStatuses: SectionStatuses
   mainHtml: string
   candidates: CandidateEntry[]
+  publishedDeployment?: PublishedDeployment
 }
 
 type View =
@@ -54,7 +58,9 @@ export default function PreviewShell({
   sectionStatuses,
   mainHtml,
   candidates,
+  publishedDeployment,
 }: PreviewShellProps) {
+  const hasActiveDeployment = publishedDeployment?.status === 'active'
   const router = useRouter()
   const [view, setView] = useState<View>({ kind: 'main' })
 
@@ -126,6 +132,9 @@ export default function PreviewShell({
         viewerUrl: body.viewerUrl,
         pin: body.pin,
         expiresInDays: body.expiresInDays,
+        mode: body.mode ?? 'first',
+        version: body.version ?? 1,
+        replaced: body.replaced,
       })
       setPublishStatus('done')
     } catch (err) {
@@ -199,6 +208,7 @@ export default function PreviewShell({
           <PublishButton
             status={publishStatus}
             onClick={handlePublish}
+            idleLabel={hasActiveDeployment ? 'Republish' : 'Publish deck'}
           />
         </div>
       </header>
@@ -252,9 +262,11 @@ function CompletionPill({
 function PublishButton({
   status,
   onClick,
+  idleLabel,
 }: {
   status: PublishStatus
   onClick: () => void
+  idleLabel: string
 }) {
   const isPublishing = status === 'publishing'
   return (
@@ -278,13 +290,13 @@ function PublishButton({
           </motion.span>
         ) : (
           <motion.span
-            key="idle"
+            key={`idle-${idleLabel}`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12 }}
           >
-            Publish deck
+            {idleLabel}
           </motion.span>
         )}
       </AnimatePresence>
