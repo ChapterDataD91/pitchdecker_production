@@ -266,6 +266,11 @@ export default function DashboardPage() {
         onCreate={handleCreate}
         isCreating={isCreating}
       />
+
+      {/* Maker's mark — anchored bottom-left, quiet */}
+      <p className="pointer-events-none fixed bottom-5 left-6 text-[11px] text-text-tertiary">
+        Built by <span className="font-medium text-text-secondary">{editorBrand.maker}</span>
+      </p>
     </div>
   )
 }

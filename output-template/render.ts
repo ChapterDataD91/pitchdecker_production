@@ -70,7 +70,7 @@ ${primitivesCss}
 <body>
 <div id="pc">
 ${renderConfidentialityBar(brand)}
-${renderHero(deck.sections.cover, brand)}
+${renderHero(deck, brand)}
 ${renderIntroSection(deck.sections.cover, brand)}
 <section class="secs"><div class="w">
 ${renderAccordion(deck, brand, slugMap, mode)}

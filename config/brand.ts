@@ -24,6 +24,8 @@ export interface EditorBrand {
   appTitle: string
   /** Optional inline SVG mark for the sidebar/topbar. Leave empty to show name only. */
   logoSvg?: string
+  /** Maker's mark shown in the dashboard footer. */
+  maker: string
 }
 
 export const editorBrand: EditorBrand = {
@@ -32,4 +34,5 @@ export const editorBrand: EditorBrand = {
   appTitle: 'PitchDecker — Top of Minds',
   // No logo mark for now — sidebar uses the text label.
   logoSvg: '',
+  maker: 'Chapter Data',
 }

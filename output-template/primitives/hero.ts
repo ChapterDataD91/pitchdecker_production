@@ -13,8 +13,32 @@
 // ---------------------------------------------------------------------------
 
 import type { Brand } from '../brand'
-import type { CoverSection } from '@/lib/types'
+import type { CoverSection, CoverStats, Deck } from '@/lib/types'
 import { esc, escAttr } from './escape'
+
+/**
+ * Derives hero stats from live section data. `cover.stats` is unused
+ * (never written by any editor) — the counts shown below the hero title
+ * are computed from scorecard / timeline / candidates at render time.
+ */
+function deriveStats(deck: Deck): CoverStats {
+  const sc = deck.sections.scorecard
+  const criteriaCount =
+    sc.mustHaves.length +
+    sc.niceToHaves.length +
+    sc.leadership.length +
+    sc.successFactors.length
+
+  const { phases, totalWeeks } = deck.sections.timeline
+  const timelineWeeks =
+    totalWeeks > 0
+      ? totalWeeks
+      : phases.reduce((sum, p) => sum + (p.durationWeeks || 0), 0)
+
+  const candidateCount = deck.sections.candidates.candidates.length
+
+  return { criteriaCount, timelineWeeks, candidateCount }
+}
 
 export const heroCss = `
 .hero {
@@ -167,8 +191,9 @@ function renderClientLogo(cover: CoverSection, location: 'hero' | 'intro'): stri
   return `<div class="client-logo-fallback">${esc(cover.clientName)}</div>`
 }
 
-export function renderHero(cover: CoverSection, brand: Brand): string {
-  const { stats } = cover
+export function renderHero(deck: Deck, brand: Brand): string {
+  const cover = deck.sections.cover
+  const stats = deriveStats(deck)
   const heroImage = cover.heroImageUrl?.trim()
     ? `<img src="${escAttr(cover.heroImageUrl)}" alt="${escAttr(cover.roleTitle)}">`
     : `<div class="hero-placeholder">Hero image</div>`
