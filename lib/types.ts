@@ -129,6 +129,7 @@ export interface SearchProfileSection {
 export interface SalarySection {
   baseLow: number
   baseHigh: number
+  isIndicative: boolean
   bonus: string
   ltip: string
   benefits: string
@@ -280,11 +281,18 @@ export interface ScorecardCriterion {
   weight: Weight
 }
 
+export type ScorecardCategoryKey =
+  | 'mustHaves'
+  | 'niceToHaves'
+  | 'leadership'
+  | 'successFactors'
+
 export interface ScorecardSection {
   mustHaves: ScorecardCriterion[]
   niceToHaves: ScorecardCriterion[]
   leadership: ScorecardCriterion[]
   successFactors: ScorecardCriterion[]
+  hiddenCategories?: ScorecardCategoryKey[]
 }
 
 // ---------------------------------------------------------------------------
@@ -345,29 +353,35 @@ export interface CandidatesSection {
   candidates: Candidate[]
   /** GDPR / hard-factors gate explanatory note shown above the candidate grid. */
   hardFactorsGateNote?: string
+  /** When false, this section is omitted from both preview and published deck. Default true. */
+  enabled?: boolean
 }
 
 // ---------------------------------------------------------------------------
 // Fee Proposal
 // ---------------------------------------------------------------------------
 
-/** A single instalment in the fee schedule. The amount is implicit: the total
- *  fee is split equally across all instalments unless future work introduces
- *  a per-instalment override. */
+/** A single instalment in the fee schedule. When `amount` is set (> 0) the
+ *  preview renders an itemised table; when it isn't, legacy behaviour splits
+ *  the total fee equally across all instalments. */
 export interface FeeInstalment {
   id: string
-  /** Short label, e.g. "Engagement", "Shortlist", "Placement" */
+  /** Short label, e.g. "Retainer", "Shortlist fee", "Placement" */
   label: string
+  /** Per-instalment amount in `currency` units. 0 = legacy "equal-split" mode. */
+  amount: number
   /** Trigger phrase, e.g. "at engagement", "upon shortlist presentation" */
   trigger: string
 }
 
-/** An optional priced add-on (e.g. management-team assessment). */
+/** A priced add-on (e.g. management-team assessment, media budget). */
 export interface FeeAddon {
   id: string
   label: string
   amount: number
   description: string
+  /** When true, renders as a non-negotiable line (no "Optional — " prefix). Default false. */
+  required?: boolean
 }
 
 /** How the search fee is priced — a flat amount or a percentage of compensation. */
@@ -392,8 +406,10 @@ export interface FeeSection {
   guaranteeMonths: number
   /** Free-text guarantee description (rendered after the guarantee header). */
   guaranteeNote: string
-  /** Optional priced add-ons (e.g. MT assessment). */
+  /** Priced add-ons, each flagged required/optional (e.g. media budget, MT assessment). */
   addons: FeeAddon[]
+  /** Free-text special terms (e.g. "25–50% discount on internally sourced candidates"). */
+  specialTerms?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -523,6 +539,7 @@ export function createEmptyDeck(
     salary: {
       baseLow: 0,
       baseHigh: 0,
+      isIndicative: false,
       bonus: '',
       ltip: '',
       benefits: '',
@@ -564,6 +581,7 @@ export function createEmptyDeck(
     candidates: {
       candidates: [],
       hardFactorsGateNote: '',
+      enabled: true,
     },
     fee: {
       feeMode: 'flat',
@@ -575,7 +593,16 @@ export function createEmptyDeck(
       instalments: [],
       guaranteeMonths: 0,
       guaranteeNote: '',
-      addons: [],
+      addons: [
+        {
+          id: 'media-budget-default',
+          label: 'Media budget',
+          amount: 2500,
+          description: '',
+          required: true,
+        },
+      ],
+      specialTerms: '',
     },
   }
 

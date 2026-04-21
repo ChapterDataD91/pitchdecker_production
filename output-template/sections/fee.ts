@@ -7,7 +7,7 @@
 // callout is centered in the section, not left-padded like other sections.
 // ---------------------------------------------------------------------------
 
-import type { FeeSection, FeeInstalment, FeeAddon } from '@/lib/types'
+import type { FeeSection, FeeAddon } from '@/lib/types'
 import type { Brand } from '../brand'
 import { esc } from '../primitives/escape'
 
@@ -41,14 +41,19 @@ function renderFeeLine(data: FeeSection): string {
       })()
     : formatMoney(data.amount, data.currency)
 
-  const triggers = data.instalments
-    .map((i: FeeInstalment) => i.trigger.trim())
-    .filter(Boolean)
+  const anyAmounts = data.instalments.some((i) => i.amount > 0)
+  const triggers = data.instalments.map((i) => i.trigger.trim()).filter(Boolean)
 
+  // New style: per-instalment amounts are set → a single headline followed
+  // by one line per instalment (rendered separately by renderInstalmentLines).
+  if (anyAmounts) {
+    return `<p><strong>Search fee:</strong> ${esc(priceLabel)}${vat}.</p>`
+  }
+
+  // Legacy: no per-instalment amounts — fall back to the original sentence.
   if (triggers.length === 0) {
     return `<p><strong>Search fee:</strong> The fee of ${esc(priceLabel)}${vat}.</p>`
   }
-
   const numWord =
     triggers.length === 2
       ? 'two'
@@ -58,6 +63,25 @@ function renderFeeLine(data: FeeSection): string {
           ? 'four'
           : `${triggers.length}`
   return `<p><strong>Search fee:</strong> The fee of ${esc(priceLabel)}${vat} is invoiced in ${esc(numWord)} equal instalments: ${esc(joinSentence(triggers))}.</p>`
+}
+
+function renderInstalmentLines(data: FeeSection): string {
+  const lines: string[] = []
+  for (const inst of data.instalments) {
+    if (inst.amount <= 0) continue
+    const label = inst.label.trim() || 'Instalment'
+    const money = formatMoney(inst.amount, data.currency)
+    const trigger = inst.trigger.trim()
+    const tail = trigger ? ` — ${esc(trigger)}` : ''
+    lines.push(`<p><strong>${esc(label)}:</strong> ${esc(money)}${tail}</p>`)
+  }
+  return lines.join('')
+}
+
+function renderSpecialTerms(data: FeeSection): string {
+  const terms = data.specialTerms?.trim()
+  if (!terms) return ''
+  return `<p><strong>Special terms:</strong> ${esc(terms)}</p>`
 }
 
 function renderGuaranteeLine(data: FeeSection): string {
@@ -82,7 +106,10 @@ function renderAddonLine(addon: FeeAddon, currency: string, vatNote: string): st
   const body = desc
     ? `${esc(desc)}: ${esc(money)}${vat}.`
     : `${esc(money)}${vat}.`
-  return `<p><strong>Optional — ${esc(addon.label)}:</strong> ${body}</p>`
+  const heading = addon.required
+    ? `<strong>${esc(addon.label)}:</strong>`
+    : `<strong>Optional — ${esc(addon.label)}:</strong>`
+  return `<p>${heading} ${body}</p>`
 }
 
 export function renderFee(data: FeeSection, _brand: Brand): string {
@@ -92,10 +119,16 @@ export function renderFee(data: FeeSection, _brand: Brand): string {
     return `<div class="ot-empty">No fee details captured yet.</div>`
   }
 
+  const requiredAddons = data.addons.filter((a) => a.required)
+  const optionalAddons = data.addons.filter((a) => !a.required)
+
   const lines = [
     renderFeeLine(data),
+    renderInstalmentLines(data),
+    ...requiredAddons.map((a) => renderAddonLine(a, data.currency, data.vatNote)),
+    renderSpecialTerms(data),
     renderGuaranteeLine(data),
-    ...data.addons.map((a) => renderAddonLine(a, data.currency, data.vatNote)),
+    ...optionalAddons.map((a) => renderAddonLine(a, data.currency, data.vatNote)),
   ]
     .filter(Boolean)
     .join('')

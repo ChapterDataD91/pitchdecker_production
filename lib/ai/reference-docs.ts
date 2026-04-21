@@ -11,9 +11,11 @@ export interface ReferenceDoc {
 }
 
 // Keep the total payload bounded so we don't blow past Claude's context
-// when the consultant has dumped a dozen dense briefs.
-const MAX_CHARS_PER_DOC = 20_000
-const MAX_TOTAL_CHARS = 80_000
+// when the consultant has dumped a dozen dense briefs. Sized for the 200k
+// context model (claude-opus-4-6): 400k chars ≈ 100k tokens, leaving ~100k
+// tokens headroom for the rest of the prompt + completion.
+const MAX_CHARS_PER_DOC = 150_000
+const MAX_TOTAL_CHARS = 400_000
 
 export function formatReferenceDocs(docs: ReferenceDoc[] | undefined): string {
   if (!docs || docs.length === 0) return ''

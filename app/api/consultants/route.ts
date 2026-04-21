@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { AlgoliaConsultant, ConsultantSummary } from '@/lib/types'
+import { decodeHtmlEntities } from '@/lib/decode-html-entities'
 
 const ALGOLIA_APP_ID = process.env.ALGOLIA_APP_ID!
 const ALGOLIA_API_KEY = process.env.ALGOLIA_API_KEY!
@@ -7,14 +8,8 @@ const ALGOLIA_CDN_BASE = process.env.ALGOLIA_CDN_BASE ?? 'https://cdn.media.topo
 const INDEX_NAME = '3777_consultants_nl-NL'
 
 function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\s+/g, ' ')
-    .trim()
+  const withoutTags = html.replace(/<[^>]*>/g, '')
+  return decodeHtmlEntities(withoutTags).replace(/\s+/g, ' ').trim()
 }
 
 function buildPhotoUrl(image: string): string {

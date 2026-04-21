@@ -44,12 +44,16 @@ const SUGGEST_TOOL = {
         items: {
           type: 'object' as const,
           properties: {
-            text: { type: 'string' as const },
+            text: {
+              type: 'string' as const,
+              description:
+                'A single criterion in the shape "<Topic>: <concrete angle>". Max 14 words. No banned filler.',
+            },
             weight: {
               type: 'number' as const,
               minimum: 1,
               maximum: 5,
-              description: 'Importance weight: 5 = dealbreaker, 1 = minor',
+              description: 'Importance: 5 = dealbreaker, 1 = minor',
             },
           },
           required: ['text', 'weight'],
@@ -62,7 +66,11 @@ const SUGGEST_TOOL = {
         items: {
           type: 'object' as const,
           properties: {
-            text: { type: 'string' as const },
+            text: {
+              type: 'string' as const,
+              description:
+                'A single preferred qualification in the shape "<Topic>: <angle>". Max 12 words. No banned filler.',
+            },
             weight: { type: 'number' as const, minimum: 1, maximum: 5 },
           },
           required: ['text', 'weight'],
@@ -74,14 +82,17 @@ const SUGGEST_TOOL = {
           intro: {
             type: 'string' as const,
             description:
-              "One sentence describing the client's culture and the personality the role demands. End with a colon.",
+              "One sentence on the client's culture and personality demand. Max 22 words. Ends with a colon.",
           },
           traits: {
             type: 'array' as const,
             minItems: 3,
             maxItems: 5,
-            items: { type: 'string' as const },
-            description: 'Specific personality/leadership qualities as concise sentences',
+            items: {
+              type: 'string' as const,
+              description:
+                'A trait in the shape "<Quality> — <specific angle>". 6–12 words. Focus on character, leadership style, cultural fit.',
+            },
           },
         },
         required: ['intro', 'traits'],

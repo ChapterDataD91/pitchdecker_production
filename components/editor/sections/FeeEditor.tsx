@@ -20,12 +20,21 @@ interface FeeEditorProps {
 }
 
 function newInstalment(): FeeInstalment {
-  return { id: crypto.randomUUID(), label: '', trigger: '' }
+  return { id: crypto.randomUUID(), label: '', amount: 0, trigger: '' }
 }
 
 function newAddon(): FeeAddon {
-  return { id: crypto.randomUUID(), label: '', amount: 0, description: '' }
+  return { id: crypto.randomUUID(), label: '', amount: 0, description: '', required: false }
 }
+
+const TRIGGER_PRESETS = [
+  'Start of the assignment',
+  'At shortlist',
+  'At offer accepted',
+  '30 days after start',
+  'Upon completion',
+  'If cancelled',
+] as const
 
 // Parse a currency-style numeric input ("100,000" or "100.000" → 100000)
 function parseAmount(input: string): number {
@@ -243,11 +252,16 @@ export default function FeeEditor({ data, onChange }: FeeEditorProps) {
 
       {/* Instalments */}
       <div>
+        <datalist id="fee-trigger-presets">
+          {TRIGGER_PRESETS.map((p) => (
+            <option key={p} value={p} />
+          ))}
+        </datalist>
         <div className="flex items-center justify-between mb-2">
           <label className="block text-sm font-medium text-text">
             Instalments
             <span className="ml-2 text-xs text-text-tertiary font-normal">
-              (split equally across {data.instalments.length || 1}{' '}
+              ({data.instalments.length}{' '}
               {data.instalments.length === 1 ? 'instalment' : 'instalments'})
             </span>
           </label>
@@ -260,9 +274,12 @@ export default function FeeEditor({ data, onChange }: FeeEditorProps) {
           </button>
         </div>
         <div className="border border-border rounded-lg overflow-hidden">
-          <div className="px-4 py-2.5 bg-bg-subtle border-b border-border grid grid-cols-[1fr_2fr_auto] gap-4">
+          <div className="px-4 py-2.5 bg-bg-subtle border-b border-border grid grid-cols-[1.25fr_auto_2fr_auto] gap-4">
             <span className="text-xs font-medium text-text-tertiary uppercase tracking-wide">
               Label
+            </span>
+            <span className="text-xs font-medium text-text-tertiary uppercase tracking-wide">
+              Amount
             </span>
             <span className="text-xs font-medium text-text-tertiary uppercase tracking-wide">
               Trigger
@@ -280,40 +297,13 @@ export default function FeeEditor({ data, onChange }: FeeEditorProps) {
             </div>
           ) : (
             data.instalments.map((inst) => (
-              <div
+              <InstalmentRow
                 key={inst.id}
-                className="px-4 py-2.5 border-b border-border last:border-b-0 grid grid-cols-[1fr_2fr_auto] gap-4 items-center"
-              >
-                <input
-                  type="text"
-                  placeholder="Engagement"
-                  value={inst.label}
-                  onChange={(e) =>
-                    updateInstalment(inst.id, { label: e.target.value })
-                  }
-                  className="rounded-md border border-transparent bg-transparent px-2 py-1.5 text-sm text-text font-medium placeholder:text-text-placeholder focus:outline-none focus:border-border focus:bg-white"
-                />
-                <input
-                  type="text"
-                  placeholder="at engagement"
-                  value={inst.trigger}
-                  onChange={(e) =>
-                    updateInstalment(inst.id, { trigger: e.target.value })
-                  }
-                  className="rounded-md border border-transparent bg-transparent px-2 py-1.5 text-sm text-text-secondary placeholder:text-text-placeholder focus:outline-none focus:border-border focus:bg-white"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeInstalment(inst.id)}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-error-light hover:text-error"
-                  aria-label={`Remove instalment ${inst.label || 'row'}`}
-                  title="Remove"
-                >
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M2.5 4h11M6 4V2.5a1 1 0 011-1h2a1 1 0 011 1V4M4.5 4l.5 9.5a1 1 0 001 1h4a1 1 0 001-1L12 4" />
-                  </svg>
-                </button>
-              </div>
+                inst={inst}
+                currencySymbol={currencySymbol}
+                onChange={(patch) => updateInstalment(inst.id, patch)}
+                onRemove={() => removeInstalment(inst.id)}
+              />
             ))
           )}
         </div>
@@ -356,11 +346,28 @@ export default function FeeEditor({ data, onChange }: FeeEditorProps) {
         </div>
       </div>
 
+      {/* Special terms */}
+      <div>
+        <label className="block text-sm font-medium text-text mb-1.5">
+          Special terms
+          <span className="ml-2 text-xs text-text-tertiary font-normal">
+            (optional)
+          </span>
+        </label>
+        <textarea
+          placeholder="e.g. 25–50% discount on internally sourced candidates."
+          value={data.specialTerms ?? ''}
+          onChange={(e) => update('specialTerms', e.target.value)}
+          rows={2}
+          className="w-full rounded-md border border-border bg-bg px-3 py-2.5 text-sm text-text placeholder:text-text-placeholder focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent resize-none"
+        />
+      </div>
+
       {/* Add-ons */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="block text-sm font-medium text-text">
-            Optional Add-ons
+            Add-ons
             <span className="ml-2 text-xs text-text-tertiary font-normal">
               ({data.addons.length}{' '}
               {data.addons.length === 1 ? 'add-on' : 'add-ons'})
@@ -400,6 +407,75 @@ export default function FeeEditor({ data, onChange }: FeeEditorProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Instalment row — 3-column editor (Label · Amount · Trigger). Local amount
+// state avoids fighting the formatter on every keystroke; commits on blur.
+// ---------------------------------------------------------------------------
+
+function InstalmentRow({
+  inst,
+  currencySymbol,
+  onChange,
+  onRemove,
+}: {
+  inst: FeeInstalment
+  currencySymbol: string
+  onChange: (patch: Partial<FeeInstalment>) => void
+  onRemove: () => void
+}) {
+  const [amountText, setAmountText] = useState<string>(formatAmount(inst.amount))
+  return (
+    <div className="px-4 py-2.5 border-b border-border last:border-b-0 grid grid-cols-[1.25fr_auto_2fr_auto] gap-4 items-center">
+      <input
+        type="text"
+        placeholder="Retainer"
+        value={inst.label}
+        onChange={(e) => onChange({ label: e.target.value })}
+        className="rounded-md border border-transparent bg-transparent px-2 py-1.5 text-sm text-text font-medium placeholder:text-text-placeholder focus:outline-none focus:border-border focus:bg-white"
+      />
+      <div className="relative w-32">
+        <input
+          type="text"
+          inputMode="numeric"
+          placeholder="10,000"
+          value={amountText}
+          onChange={(e) => setAmountText(e.target.value)}
+          onBlur={() => {
+            const parsed = parseAmount(amountText)
+            setAmountText(formatAmount(parsed))
+            if (parsed !== inst.amount) onChange({ amount: parsed })
+          }}
+          className="w-full rounded-md border border-transparent bg-transparent px-2 py-1.5 pl-6 text-sm text-text font-mono placeholder:text-text-placeholder focus:outline-none focus:border-border focus:bg-white"
+        />
+        {currencySymbol && (
+          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-text-tertiary pointer-events-none">
+            {currencySymbol}
+          </span>
+        )}
+      </div>
+      <input
+        type="text"
+        list="fee-trigger-presets"
+        placeholder="Start of the assignment"
+        value={inst.trigger}
+        onChange={(e) => onChange({ trigger: e.target.value })}
+        className="rounded-md border border-transparent bg-transparent px-2 py-1.5 text-sm text-text-secondary placeholder:text-text-placeholder focus:outline-none focus:border-border focus:bg-white"
+      />
+      <button
+        type="button"
+        onClick={onRemove}
+        className="flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-error-light hover:text-error"
+        aria-label={`Remove instalment ${inst.label || 'row'}`}
+        title="Remove"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M2.5 4h11M6 4V2.5a1 1 0 011-1h2a1 1 0 011 1V4M4.5 4l.5 9.5a1 1 0 001 1h4a1 1 0 001-1L12 4" />
+        </svg>
+      </button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Add-on row — its own component so the local amount-text state doesn't
 // collide with sibling rows' state (React's reconciliation by key).
 // ---------------------------------------------------------------------------
@@ -418,10 +494,11 @@ function AddonRow({
   const [amountText, setAmountText] = useState<string>(formatAmount(addon.amount))
   const symbol =
     currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : currency === 'USD' ? '$' : ''
+  const isRequired = addon.required === true
 
   return (
     <div className="border border-border rounded-lg p-3">
-      <div className="grid grid-cols-[1fr_auto_auto] gap-3 mb-2 items-end">
+      <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 mb-2 items-end">
         <div>
           <label className="block text-xs font-medium text-text-tertiary uppercase tracking-wide mb-1">
             Label
@@ -459,6 +536,15 @@ function AddonRow({
             )}
           </div>
         </div>
+        <label className="flex h-[38px] items-center gap-2 cursor-pointer select-none rounded-md border border-border bg-bg px-3 text-xs font-medium text-text-secondary">
+          <input
+            type="checkbox"
+            checked={isRequired}
+            onChange={(e) => onChange({ required: e.target.checked })}
+            className="h-3.5 w-3.5 rounded border-border text-accent focus:ring-accent focus:ring-2 focus:ring-offset-0"
+          />
+          Required
+        </label>
         <button
           type="button"
           onClick={onRemove}

@@ -3,7 +3,12 @@
 import { useRef, useState } from 'react'
 import { v4 as uuid } from 'uuid'
 import { motion, AnimatePresence } from 'framer-motion'
-import type { ScorecardSection, ScorecardCriterion, Weight } from '@/lib/types'
+import type {
+  ScorecardSection,
+  ScorecardCriterion,
+  ScorecardCategoryKey,
+  Weight,
+} from '@/lib/types'
 import { useEditorStore } from '@/lib/store/editor-store'
 import { useAIStore } from '@/lib/store/ai-store'
 import LoadingDots from '@/components/ui/LoadingDots'
@@ -18,7 +23,7 @@ interface ScorecardEditorProps {
 // Categories
 // ---------------------------------------------------------------------------
 
-type CategoryKey = 'mustHaves' | 'niceToHaves' | 'leadership' | 'successFactors'
+type CategoryKey = ScorecardCategoryKey
 
 const CATEGORIES: { key: CategoryKey; title: string; color: string }[] = [
   { key: 'mustHaves', title: 'Must-Haves', color: 'bg-error-light text-error' },
@@ -37,6 +42,7 @@ function normalize(data: ScorecardSection): ScorecardSection {
     niceToHaves: data.niceToHaves ?? [],
     leadership: data.leadership ?? [],
     successFactors: data.successFactors ?? [],
+    hiddenCategories: data.hiddenCategories ?? [],
   }
 }
 
@@ -153,6 +159,19 @@ export default function ScorecardEditor({
   function removeCriterion(key: CategoryKey, id: string) {
     clearUndo()
     onChange({ ...data, [key]: data[key].filter((c) => c.id !== id) })
+  }
+
+  function hideCategory(key: CategoryKey) {
+    clearUndo()
+    const current = data.hiddenCategories ?? []
+    if (current.includes(key)) return
+    onChange({ ...data, hiddenCategories: [...current, key] })
+  }
+
+  function restoreCategory(key: CategoryKey) {
+    clearUndo()
+    const current = data.hiddenCategories ?? []
+    onChange({ ...data, hiddenCategories: current.filter((k) => k !== key) })
   }
 
   // -- Import from search profile ----------------------------------------
@@ -329,11 +348,13 @@ export default function ScorecardEditor({
 
       {/* Category grid */}
       <div className="grid grid-cols-2 gap-4">
-        {CATEGORIES.map((cat) => {
+        {CATEGORIES.filter(
+          (cat) => !(data.hiddenCategories ?? []).includes(cat.key),
+        ).map((cat) => {
           const criteria = data[cat.key]
           return (
             <section key={cat.key} className="border border-border rounded-lg">
-              <div className="px-4 py-3 border-b border-border bg-bg-subtle rounded-t-lg flex items-center gap-2">
+              <div className="group px-4 py-3 border-b border-border bg-bg-subtle rounded-t-lg flex items-center gap-2">
                 <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-xs font-bold ${cat.color}`}>
                   {cat.title.charAt(0)}
                 </span>
@@ -341,6 +362,17 @@ export default function ScorecardEditor({
                 <span className="text-xs text-text-tertiary ml-auto">
                   {criteria.length} {criteria.length === 1 ? 'criterion' : 'criteria'}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => hideCategory(cat.key)}
+                  aria-label={`Hide ${cat.title}`}
+                  title={`Hide ${cat.title}`}
+                  className="text-text-tertiary opacity-0 transition-opacity hover:text-error group-hover:opacity-100 focus:opacity-100"
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M3.5 3.5L10.5 10.5M10.5 3.5L3.5 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
               </div>
               <div className="p-4">
                 {criteria.length > 0 && (
@@ -367,6 +399,28 @@ export default function ScorecardEditor({
           )
         })}
       </div>
+
+      {/* Hidden categories — restore affordance */}
+      {(data.hiddenCategories ?? []).length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-text-tertiary">
+          <span>Hidden:</span>
+          {CATEGORIES.filter((cat) =>
+            (data.hiddenCategories ?? []).includes(cat.key),
+          ).map((cat) => (
+            <button
+              key={cat.key}
+              type="button"
+              onClick={() => restoreCategory(cat.key)}
+              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-text-secondary hover:text-accent hover:border-accent hover:bg-accent-light transition-colors"
+            >
+              <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
+                <path d="M7 3v8M3 7h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              <span>{cat.title}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

@@ -151,6 +151,15 @@ export default function SalaryEditor({ data, onChange }: SalaryEditorProps) {
             </div>
           </div>
         </div>
+        <label className="mt-3 flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none w-fit">
+          <input
+            type="checkbox"
+            checked={data.isIndicative ?? false}
+            onChange={(e) => update({ isIndicative: e.target.checked })}
+            className="h-3.5 w-3.5 rounded border-border text-accent focus:ring-accent focus:ring-2 focus:ring-offset-0"
+          />
+          <span>Mark as indicative — adds &ldquo;(indicative)&rdquo; to the published salary</span>
+        </label>
         {benchmarkResult && benchmarkResult.n > 0 && (
           <p className="mt-2 text-xs text-text-tertiary">
             Based on {benchmarkResult.n} placement

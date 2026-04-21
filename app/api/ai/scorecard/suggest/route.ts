@@ -38,8 +38,17 @@ const SUGGEST_TOOL = {
         items: {
           type: 'object' as const,
           properties: {
-            text: { type: 'string' as const },
-            weight: { type: 'number' as const, minimum: 1, maximum: 5 },
+            text: {
+              type: 'string' as const,
+              description:
+                'Leadership criterion in the shape "<Topic> — <specific angle>". Max 10 words. Always include the angle. No banned filler.',
+            },
+            weight: {
+              type: 'number' as const,
+              minimum: 1,
+              maximum: 5,
+              description: 'Importance: 5 = dealbreaker, 1 = minor',
+            },
           },
           required: ['text', 'weight'],
         },
@@ -51,7 +60,11 @@ const SUGGEST_TOOL = {
         items: {
           type: 'object' as const,
           properties: {
-            text: { type: 'string' as const },
+            text: {
+              type: 'string' as const,
+              description:
+                'A concrete year-one outcome. Max 12 words. Reference client-specific situation/competitors/priorities where context supports it.',
+            },
             weight: { type: 'number' as const, minimum: 1, maximum: 5 },
           },
           required: ['text', 'weight'],

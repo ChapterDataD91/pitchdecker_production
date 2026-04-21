@@ -12,18 +12,19 @@ function formatEur(amount: number): string {
   return `€${amount.toLocaleString('en-GB').replace(/,/g, '\u202F')}`
 }
 
-function renderBase(low: number, high: number): string | null {
+function renderBase(low: number, high: number, isIndicative: boolean): string | null {
   if (low <= 0 && high <= 0) return null
+  const suffix = isIndicative ? ' (indicative)' : ''
   if (low > 0 && high > 0 && high !== low) {
-    return `${formatEur(low)} – ${formatEur(high)} gross per year`
+    return `${formatEur(low)} – ${formatEur(high)} gross per year${suffix}`
   }
-  return `${formatEur(low > 0 ? low : high)} gross per year (indicative)`
+  return `${formatEur(low > 0 ? low : high)} gross per year${suffix}`
 }
 
 export function renderSalary(data: SalarySection, _brand: Brand): string {
   const lines: string[] = []
 
-  const base = renderBase(data.baseLow, data.baseHigh)
+  const base = renderBase(data.baseLow, data.baseHigh, data.isIndicative ?? false)
   if (base) {
     lines.push(`<p><strong>Base salary:</strong> ${esc(base)}</p>`)
   }

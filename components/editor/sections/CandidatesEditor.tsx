@@ -21,7 +21,8 @@ const MAX_CONCURRENT_AI = 10
 
 // `onChange` is kept for interface parity with the section-editor router
 // but writes flow through editor-store actions so parallel fan-out does
-// not race on a stale render closure of `data.candidates`.
+// not race on a stale render closure of `data.candidates`. The `enabled`
+// flag is a single scalar with no race surface, so it goes via onChange.
 interface CandidatesEditorProps {
   data: CandidatesSection
   onChange: (data: CandidatesSection) => void
@@ -60,6 +61,7 @@ function shortPersonaLabel(title: string): string {
 
 export default function CandidatesEditor({
   data,
+  onChange,
 }: CandidatesEditorProps) {
   const deck = useEditorStore((s) => s.deck)
   const appendCandidate = useEditorStore((s) => s.appendCandidate)
@@ -225,12 +227,52 @@ export default function CandidatesEditor({
   const unscoredCount = data.candidates.filter(
     (c) => c.overallScore === 0,
   ).length
+  const isEnabled = data.enabled !== false
+
+  const includeToggle = (
+    <div className="flex items-center justify-between rounded-lg border border-border bg-bg-subtle px-4 py-2.5">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-text">
+          Include Sample Candidates in this deck
+        </p>
+        <p className="mt-0.5 text-xs text-text-tertiary">
+          {isEnabled
+            ? 'This section will appear in the preview and published deck.'
+            : 'This section is excluded — it will NOT appear in the preview or published deck.'}
+        </p>
+      </div>
+      <label className="relative inline-flex shrink-0 cursor-pointer items-center">
+        <input
+          type="checkbox"
+          checked={isEnabled}
+          onChange={(e) => onChange({ ...data, enabled: e.target.checked })}
+          className="peer sr-only"
+        />
+        <div
+          className="
+            h-6 w-11 rounded-full bg-border-strong
+            peer-checked:bg-accent
+            transition-colors
+            after:content-[''] after:absolute after:top-0.5 after:left-0.5
+            after:h-5 after:w-5 after:rounded-full after:bg-white
+            after:shadow-sm after:transition-transform
+            peer-checked:after:translate-x-5
+          "
+        />
+      </label>
+    </div>
+  )
 
   if (!hasCandidates && !hasPending) {
     return (
       <div className="space-y-4">
-        <UploadZone variant="hero" onFilesSelected={handleFiles} />
-        <QueryDatabaseStub />
+        {includeToggle}
+        {isEnabled && (
+          <>
+            <UploadZone variant="hero" onFilesSelected={handleFiles} />
+            <QueryDatabaseStub />
+          </>
+        )}
       </div>
     )
   }
@@ -244,6 +286,7 @@ export default function CandidatesEditor({
 
   return (
     <div className="space-y-4">
+      {includeToggle}
       <UploadZone variant="compact" onFilesSelected={handleFiles} />
 
       {/* Toolbar — score all */}

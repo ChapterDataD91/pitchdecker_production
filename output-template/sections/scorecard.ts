@@ -4,11 +4,16 @@
 // Reference: demo HTML L567-597.
 // ---------------------------------------------------------------------------
 
-import type { ScorecardSection, ScorecardCriterion } from '@/lib/types'
+import type {
+  ScorecardSection,
+  ScorecardCriterion,
+  ScorecardCategoryKey,
+} from '@/lib/types'
 import type { Brand } from '../brand'
 import { esc } from '../primitives/escape'
 
 interface CategoryDef {
+  key: ScorecardCategoryKey
   label: string
   criteria: readonly ScorecardCriterion[]
 }
@@ -25,12 +30,14 @@ function renderCategoryBlock(cat: CategoryDef): string {
 }
 
 export function renderScorecard(data: ScorecardSection, _brand: Brand): string {
-  const categories: CategoryDef[] = [
-    { label: 'Must-Haves', criteria: data.mustHaves },
-    { label: 'Nice-to-Haves', criteria: data.niceToHaves },
-    { label: 'Leadership & Personality', criteria: data.leadership },
-    { label: 'First-Year Success Factors', criteria: data.successFactors },
+  const hidden = new Set(data.hiddenCategories ?? [])
+  const allCategories: CategoryDef[] = [
+    { key: 'mustHaves', label: 'Must-Haves', criteria: data.mustHaves },
+    { key: 'niceToHaves', label: 'Nice-to-Haves', criteria: data.niceToHaves },
+    { key: 'leadership', label: 'Leadership & Personality', criteria: data.leadership },
+    { key: 'successFactors', label: 'First-Year Success Factors', criteria: data.successFactors },
   ]
+  const categories = allCategories.filter((c) => !hidden.has(c.key))
 
   const total = categories.reduce((n, c) => n + c.criteria.length, 0)
   if (total === 0) {

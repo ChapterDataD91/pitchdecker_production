@@ -40,6 +40,13 @@ interface AccordionSectionDef {
    * excluded state so the consultant sees their decision reflected.
    */
   skipInPublish?: (deck: Deck) => boolean
+  /**
+   * Optional per-section opt-out check for preview mode. When true, the
+   * section is omitted from the preview output entirely. Used for sections
+   * the consultant explicitly toggles off (e.g. Sample Candidates when not
+   * delivering any for this mandate).
+   */
+  skipInPreview?: (deck: Deck) => boolean
   render: (deck: Deck, brand: Brand, slugMap: Map<string, string>) => string
 }
 
@@ -90,6 +97,8 @@ export const ACCORDION_SECTIONS: AccordionSectionDef[] = [
     id: 'candidates',
     title: 'Sample Candidates',
     anchorId: 'candidates',
+    skipInPublish: (deck) => deck.sections.candidates.enabled === false,
+    skipInPreview: (deck) => deck.sections.candidates.enabled === false,
     render: (deck, brand, slugMap) =>
       renderCandidates(deck.sections.candidates, brand, slugMap),
   },
@@ -122,6 +131,7 @@ export function renderAccordion(
     const status = statuses[section.id]
     if (mode === 'publish' && status === 'empty') continue
     if (mode === 'publish' && section.skipInPublish?.(deck)) continue
+    if (mode === 'preview' && section.skipInPreview?.(deck)) continue
 
     visibleNumber++
     let body: string
