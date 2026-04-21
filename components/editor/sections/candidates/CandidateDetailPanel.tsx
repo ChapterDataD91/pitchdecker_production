@@ -1,9 +1,11 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, type DragEvent } from 'react'
 import { v4 as uuid } from 'uuid'
 import SlideOutPanel from '@/components/ui/SlideOutPanel'
 import LoadingDots from '@/components/ui/LoadingDots'
+import { useEditorStore } from '@/lib/store/editor-store'
+import { useCandidatePhotoUpload } from './useCandidatePhotoUpload'
 import type {
   Candidate,
   CareerEntry,
@@ -141,18 +143,11 @@ export default function CandidateDetailPanel({
         {/* Header */}
         <section>
           <div className="flex items-start gap-4">
-            {candidate.photoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={candidate.photoUrl}
-                alt={candidate.name}
-                className="h-16 w-16 rounded-md object-cover"
-              />
-            ) : (
-              <div className="flex h-16 w-16 items-center justify-center rounded-md bg-bg-muted text-lg font-semibold text-text-tertiary">
-                {getInitials(candidate.name)}
-              </div>
-            )}
+            <PhotoBlock
+              candidate={candidate}
+              open={open}
+              onClear={() => onChange({ photoUrl: '' })}
+            />
 
             <div className="flex-1 min-w-0">
               <input
@@ -459,6 +454,203 @@ function StepperBar({
           aria-label={`Score ${n}`}
         />
       ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// PhotoBlock — avatar + change/remove controls + drag-drop + paste
+// ---------------------------------------------------------------------------
+
+function PhotoBlock({
+  candidate,
+  open,
+  onClear,
+}: {
+  candidate: Candidate
+  open: boolean
+  onClear: () => void
+}) {
+  const deckId = useEditorStore((s) => s.deck?.id ?? '')
+  const patchCandidate = useEditorStore((s) => s.patchCandidate)
+
+  const { inputRef, uploading, previewUrl, error, upload, openPicker } =
+    useCandidatePhotoUpload({
+      deckId,
+      candidateId: candidate.id,
+      onUploaded: (photoUrl) => patchCandidate(candidate.id, { photoUrl }),
+    })
+
+  // Keep a ref to `upload` so the paste effect below doesn't re-subscribe
+  // on every render (the hook memoises it, but we still want tight coupling).
+  const uploadRef = useRef(upload)
+  useEffect(() => {
+    uploadRef.current = upload
+  }, [upload])
+
+  // Global paste listener — active only while the panel is open. Skips paste
+  // events that originate inside a text field so pasting into the name/role
+  // inputs behaves normally.
+  useEffect(() => {
+    if (!open) return
+    function handlePaste(e: ClipboardEvent) {
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName
+      if (
+        target?.isContentEditable ||
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA'
+      ) {
+        return
+      }
+      const items = e.clipboardData?.items
+      if (!items) return
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile()
+          if (file) {
+            e.preventDefault()
+            uploadRef.current(file)
+            return
+          }
+        }
+      }
+    }
+    document.addEventListener('paste', handlePaste)
+    return () => document.removeEventListener('paste', handlePaste)
+  }, [open])
+
+  function handleDrop(e: DragEvent) {
+    e.preventDefault()
+    const file = e.dataTransfer?.files?.[0]
+    if (file?.type.startsWith('image/')) upload(file)
+  }
+
+  function handleDragOver(e: DragEvent) {
+    e.preventDefault()
+  }
+
+  const displayUrl = previewUrl ?? candidate.photoUrl
+  const hasPhoto = displayUrl.trim() !== ''
+
+  return (
+    <div className="shrink-0">
+      <button
+        type="button"
+        onClick={openPicker}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        disabled={uploading}
+        className={`group relative h-16 w-16 overflow-hidden rounded-md transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+          hasPhoto ? '' : 'bg-bg-muted'
+        } ${uploading ? 'cursor-wait' : 'cursor-pointer'}`}
+        aria-label={
+          hasPhoto
+            ? `Replace photo for ${candidate.name || 'candidate'}`
+            : `Upload photo for ${candidate.name || 'candidate'}`
+        }
+      >
+        {hasPhoto ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={displayUrl}
+            alt={candidate.name}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center text-lg font-semibold text-text-tertiary">
+            {getInitials(candidate.name)}
+          </span>
+        )}
+
+        <span
+          className={`absolute inset-0 flex items-center justify-center transition-colors ${
+            uploading
+              ? 'bg-black/40'
+              : 'bg-black/0 group-hover:bg-black/35 group-focus-visible:bg-black/35'
+          }`}
+          aria-hidden="true"
+        >
+          {uploading ? (
+            <svg
+              className="h-5 w-5 animate-spin text-white"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeOpacity="0.3"
+                strokeWidth="3"
+              />
+              <path
+                d="M22 12a10 10 0 0 1-10 10"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+            </svg>
+          ) : (
+            <svg
+              className="h-5 w-5 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
+          )}
+        </span>
+      </button>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) upload(file)
+          e.target.value = ''
+        }}
+      />
+
+      <div className="mt-2 flex items-center gap-2 text-[11px]">
+        <button
+          type="button"
+          onClick={openPicker}
+          disabled={uploading}
+          className="font-medium text-accent hover:text-accent-hover transition-colors disabled:opacity-50"
+        >
+          {hasPhoto ? 'Change' : 'Upload'}
+        </button>
+        {candidate.photoUrl && (
+          <>
+            <span className="text-text-tertiary">·</span>
+            <button
+              type="button"
+              onClick={onClear}
+              disabled={uploading}
+              className="font-medium text-text-tertiary hover:text-rose-600 transition-colors disabled:opacity-50"
+            >
+              Remove
+            </button>
+          </>
+        )}
+      </div>
+
+      {error && (
+        <p role="alert" className="mt-1 text-[11px] font-medium text-error">
+          {error}
+        </p>
+      )}
     </div>
   )
 }

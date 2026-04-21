@@ -11,6 +11,7 @@ import { useEditorStore } from '@/lib/store/editor-store'
 import { fetchWithRetry, mapLimit } from '@/lib/async/concurrency'
 import UploadZone from './candidates/UploadZone'
 import CandidateDetailPanel from './candidates/CandidateDetailPanel'
+import CandidatePhotoAvatar from './candidates/CandidatePhotoAvatar'
 import LoadingDots from '@/components/ui/LoadingDots'
 
 // Bound for parallel AI calls (CV parse, scoring). Sized to stay under
@@ -46,13 +47,6 @@ const PERSONA_COLORS = [
 
 function personaColorFor(index: number): string {
   return PERSONA_COLORS[index % PERSONA_COLORS.length]
-}
-
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '?'
-  if (parts.length === 1) return parts[0][0].toUpperCase()
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
 function shortPersonaLabel(title: string): string {
@@ -387,19 +381,8 @@ function CandidateCard({
         </div>
 
         {/* Avatar */}
-        <div className="shrink-0">
-          {candidate.photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={candidate.photoUrl}
-              alt={candidate.name}
-              className="h-12 w-12 rounded-md object-cover"
-            />
-          ) : (
-            <div className="flex h-12 w-12 items-center justify-center rounded-md bg-bg-muted text-sm font-semibold text-text-tertiary">
-              {getInitials(candidate.name)}
-            </div>
-          )}
+        <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+          <CandidatePhotoAvatar candidate={candidate} size="sm" />
         </div>
 
         {/* Name, role */}
