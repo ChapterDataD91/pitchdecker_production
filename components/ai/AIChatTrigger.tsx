@@ -16,8 +16,9 @@ export default function AIChatTrigger() {
           exit={{ scale: 0, opacity: 0 }}
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
           onClick={openPanel}
-          className="fixed bottom-6 right-6 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-accent text-white shadow-lg transition-colors hover:bg-accent-hover active:scale-[0.96]"
-          aria-label="Open AI assistant"
+          className="group fixed bottom-6 right-6 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-accent text-white shadow-lg transition-colors hover:bg-accent-hover active:scale-[0.96]"
+          aria-label="Open AI assistant (⌘J)"
+          title="Open AI assistant (⌘J)"
         >
           <svg
             width="20"

@@ -15,6 +15,8 @@ import SectionHeader from '@/components/editor/SectionHeader'
 import LoadingDots from '@/components/ui/LoadingDots'
 import AIPanel from '@/components/ai/AIPanel'
 import AIChatTrigger from '@/components/ai/AIChatTrigger'
+import CommandPalette from '@/components/ui/CommandPalette'
+import { useGlobalShortcuts } from '@/lib/hooks/useGlobalShortcuts'
 
 // Section editors
 import CoverEditor from '@/components/editor/sections/CoverEditor'
@@ -123,17 +125,8 @@ export default function DeckEditorPage({
     })
   }, [toolsPersonalityProfile]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keyboard shortcut: Cmd+Shift+A to toggle AI panel
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.metaKey && e.shiftKey && e.key === 'a') {
-        e.preventDefault()
-        useAIStore.getState().togglePanel()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  // Global keyboard shortcuts: ⌘K palette, ⌘J AI panel
+  const { paletteOpen, closePalette } = useGlobalShortcuts()
 
   // Build sidebar section data
   const sidebarSections = SECTIONS.map((section) => ({
@@ -310,6 +303,9 @@ export default function DeckEditorPage({
 
       {/* Floating trigger */}
       <AIChatTrigger />
+
+      {/* Command palette — ⌘K */}
+      <CommandPalette open={paletteOpen} onClose={closePalette} deckId={id} />
     </div>
   )
 }
