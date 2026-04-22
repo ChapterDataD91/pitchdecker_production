@@ -6,6 +6,7 @@ import type {
   AssessmentSection,
   AssessmentPillar,
   ConsultantSummary,
+  Locale,
   TeamMember,
 } from '@/lib/types'
 import { useEditorStore } from '@/lib/store/editor-store'
@@ -17,9 +18,14 @@ interface AssessmentEditorProps {
 
 // ---------------------------------------------------------------------------
 // Hogan template — the current default (and only) assessment offering.
+//
+// Resolved by deck locale at apply time. Hogan instrument names (HPI, HDS,
+// MVPI) stay English because they are Hogan's branded product names.
+// Marlies's certification title also stays English — it's a certification
+// label, not a functional description.
 // ---------------------------------------------------------------------------
 
-const HOGAN_TEMPLATE: AssessmentSection = {
+const HOGAN_TEMPLATE_EN: AssessmentSection = {
   enabled: true,
   assessor: {
     name: 'Marlies Hoogvliet',
@@ -58,6 +64,51 @@ const HOGAN_TEMPLATE: AssessmentSection = {
     'As a foundation for successful onboarding of the selected candidate',
   ],
   costsNote: 'Assessment costs are included in our search fee.',
+}
+
+const HOGAN_TEMPLATE_NL: AssessmentSection = {
+  enabled: true,
+  assessor: {
+    name: 'Marlies Hoogvliet',
+    title: 'Certified Hogan Leadership Assessor',
+    photoUrl: '',
+    bio: 'Marlies is onze in-house assessment-specialist en gecertificeerd Hogan-practitioner. Zij gebruikt de Hogan Assessment Suite, wereldwijd de gouden standaard voor leiderschaps-assessment en in gebruik bij meer dan 75% van de Fortune 500. Meer informatie: hoganassessments.com.',
+  },
+  providerName: 'Hogan',
+  sampleReport: null,
+  mtAssessment: null,
+  pillars: [
+    {
+      key: 'HPI',
+      label: 'Hogan Personality Inventory (HPI)',
+      description:
+        'Meet het dagelijkse gedrag: hoe de kandidaat leidt, communiceert en besluiten neemt wanneer die op zijn of haar best is. Voorspelt reputatie en leiderschapsstijl.',
+    },
+    {
+      key: 'HDS',
+      label: 'Hogan Development Survey (HDS)',
+      description:
+        'Identificeert performance-risico’s en derailers: gedragstendensen die zich tonen onder druk, stress of vermoeidheid. Essentieel om te begrijpen waar een leider kan vastlopen, niet alleen waar die succesvol is.',
+    },
+    {
+      key: 'MVPI',
+      label: 'Motives, Values, Preferences Inventory (MVPI)',
+      description:
+        'Brengt kernwaarden en motivators in kaart. Voorspelt culturele fit, leiderschapsklimaat en in welk type organisatie de kandidaat tot bloei komt.',
+    },
+  ],
+  processDescription:
+    'Het assessment bestaat uit een schriftelijk deel (circa 1,5 uur) en een psychologisch gesprek van 1,5 uur per kandidaat, waarin de drie Hogan-instrumenten worden gecombineerd met een gestructureerd leiderschapsinterview. Marlies levert een uitgebreid adviesrapport met scores, narratieve interpretatie, risicofactoren en ontwikkeladvies, dat mondeling aan de opdrachtgever wordt gepresenteerd met bijbehorende schriftelijke documentatie. We assessen de 2 finalisten op de shortlist.',
+  purposes: [
+    'Als selectie-instrument voor de definitieve aannamebeslissing',
+    'Als input voor gestructureerde referentiechecks',
+    'Als basis voor een succesvolle onboarding van de gekozen kandidaat',
+  ],
+  costsNote: 'De assessment-kosten zijn inbegrepen in onze search fee.',
+}
+
+function getHoganTemplate(locale: Locale): AssessmentSection {
+  return locale === 'nl' ? HOGAN_TEMPLATE_NL : HOGAN_TEMPLATE_EN
 }
 
 // ---------------------------------------------------------------------------
@@ -140,11 +191,13 @@ export default function AssessmentEditor({ data, onChange }: AssessmentEditorPro
   function applyTemplate() {
     previousRef.current = data
     setTemplateApplied(true)
+    const locale = useEditorStore.getState().deck?.locale ?? 'nl'
+    const template = getHoganTemplate(locale)
     const teamMembers = [...(team?.leadTeam ?? []), ...(team?.network ?? [])]
-    const localPhoto = findAssessorPhoto(HOGAN_TEMPLATE.assessor.name, teamMembers)
+    const localPhoto = findAssessorPhoto(template.assessor.name, teamMembers)
     onChange({
-      ...HOGAN_TEMPLATE,
-      assessor: { ...HOGAN_TEMPLATE.assessor, photoUrl: localPhoto },
+      ...template,
+      assessor: { ...template.assessor, photoUrl: localPhoto },
     })
 
     // Not found in the deck's own team — look her up in the firm-wide
@@ -152,7 +205,7 @@ export default function AssessmentEditor({ data, onChange }: AssessmentEditorPro
     // against the user editing the assessor name in the meantime by reading
     // the latest store state at patch time.
     if (!localPhoto) {
-      const targetName = HOGAN_TEMPLATE.assessor.name
+      const targetName = template.assessor.name
       void lookupConsultantPhoto(targetName).then((fetched) => {
         if (!fetched) return
         const current = useEditorStore.getState().deck?.sections.assessment

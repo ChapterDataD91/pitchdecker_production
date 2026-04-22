@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import { v4 as uuid } from 'uuid'
 import { motion, AnimatePresence } from 'framer-motion'
-import type { TimelineSection, TimelinePhase } from '@/lib/types'
+import type { Locale, TimelineSection, TimelinePhase } from '@/lib/types'
 import { useEditorStore } from '@/lib/store/editor-store'
 import { useAIStore } from '@/lib/store/ai-store'
 import LoadingDots from '@/components/ui/LoadingDots'
@@ -14,10 +14,12 @@ interface TimelineEditorProps {
 }
 
 // ---------------------------------------------------------------------------
-// 12-week template
+// 12-week template — resolved by the deck's locale so "Apply template" lands
+// in the right language. Existing phases already in the deck are not
+// retranslated; only new template applications use the locale.
 // ---------------------------------------------------------------------------
 
-const DEFAULT_PHASES: Omit<TimelinePhase, 'id'>[] = [
+const DEFAULT_PHASES_EN: Omit<TimelinePhase, 'id'>[] = [
   {
     name: 'Intake & Market Scan',
     description: 'In-depth intake with key stakeholders. Together with you, we interview a selection of stakeholders — this sharpens the search profile and deepens our understanding of the culture and leadership needs. Market mapping: 30-60 candidates across target sectors.',
@@ -61,6 +63,67 @@ const DEFAULT_PHASES: Omit<TimelinePhase, 'id'>[] = [
     order: 5,
   },
 ]
+
+const DEFAULT_PHASES_NL: Omit<TimelinePhase, 'id'>[] = [
+  {
+    name: 'Intake & marktscan',
+    description: 'Diepgaande intake met de belangrijkste stakeholders. Samen met u spreken we een selectie van stakeholders — dit scherpt het zoekprofiel aan en verdiept ons begrip van de cultuur en leiderschapsbehoefte. Marktscan: 30-60 kandidaten in de relevante sectoren.',
+    durationWeeks: 2,
+    milestones: [
+      'Stakeholdergesprekken afgerond',
+      'Zoekprofiel definitief',
+      'Marktscan opgeleverd',
+    ],
+    order: 0,
+  },
+  {
+    name: 'Benadering & eerste gesprekken',
+    description: 'Vertrouwelijke benadering van kandidaten. Eerste selectiegesprekken door het searchteam. Voortgangsupdate met marktrespons en eerste kandidaatindrukken.',
+    durationWeeks: 4,
+    milestones: [
+      'Kandidaten benaderd',
+      'Eerste gesprekken gevoerd',
+      'Voortgangsupdate opgeleverd',
+    ],
+    order: 1,
+  },
+  {
+    name: 'Longlist & verdieping',
+    description: 'Longlist-presentatie (8-10 kandidaten). Shortlist-selectie (3-4) in overleg met de opdrachtgever.',
+    durationWeeks: 2,
+    milestones: ['Longlist gepresenteerd', 'Shortlist geselecteerd'],
+    order: 2,
+  },
+  {
+    name: 'Shortlist-gesprekken',
+    description: 'Shortlist-kandidaten ontmoeten de opdrachtgever en belangrijke stakeholders. Gestructureerde debrief na elke ronde.',
+    durationWeeks: 2,
+    milestones: ['Gesprekken met opdrachtgever gevoerd', 'Debriefs afgerond'],
+    order: 3,
+  },
+  {
+    name: 'Assessment & referenties',
+    description: 'Leiderschaps-assessment (bv. Hogan) voor de 2 finalisten. Referentiechecks (3-4 per kandidaat). Adviesrapport.',
+    durationWeeks: 1,
+    milestones: [
+      'Assessments afgerond',
+      'Referentiechecks gedaan',
+      'Adviesrapport opgeleverd',
+    ],
+    order: 4,
+  },
+  {
+    name: 'Aanstelling & transitie',
+    description: 'Onderhandeling arbeidsvoorwaarden. Transitieplanning. Onboarding-advies.',
+    durationWeeks: 1,
+    milestones: ['Voorwaarden overeengekomen', 'Transitieplan klaar'],
+    order: 5,
+  },
+]
+
+function getDefaultPhases(locale: Locale): Omit<TimelinePhase, 'id'>[] {
+  return locale === 'nl' ? DEFAULT_PHASES_NL : DEFAULT_PHASES_EN
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -145,7 +208,8 @@ export default function TimelineEditor({ data, onChange }: TimelineEditorProps) 
 
   function applyTemplate() {
     previousPhasesRef.current = phases
-    const templatePhases: TimelinePhase[] = DEFAULT_PHASES.map((p) => ({
+    const locale = useEditorStore.getState().deck?.locale ?? 'nl'
+    const templatePhases: TimelinePhase[] = getDefaultPhases(locale).map((p) => ({
       ...p,
       id: uuid(),
     }))
