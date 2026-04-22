@@ -11,6 +11,7 @@
 
 import type { Deck, SectionStatuses } from '@/lib/types'
 import type { Brand } from './brand'
+import type { OutputStrings } from './strings'
 
 type SectionId = keyof SectionStatuses
 
@@ -29,7 +30,7 @@ import { renderFee } from './sections/fee'
 
 interface AccordionSectionDef {
   id: Exclude<SectionId, 'cover'>
-  title: string
+  title: (s: OutputStrings) => string
   anchorId?: string
   /** Optional class added to the .sb body wrapper, e.g. "sb--centered" for Fee. */
   bodyClassExtra?: string
@@ -47,7 +48,12 @@ interface AccordionSectionDef {
    * delivering any for this mandate).
    */
   skipInPreview?: (deck: Deck) => boolean
-  render: (deck: Deck, brand: Brand, slugMap: Map<string, string>) => string
+  render: (
+    deck: Deck,
+    brand: Brand,
+    strings: OutputStrings,
+    slugMap: Map<string, string>,
+  ) => string
 }
 
 // Every non-cover section can be toggled off in the editor. When off, we skip
@@ -59,77 +65,83 @@ const isDisabled = (deck: Deck, id: Exclude<SectionId, 'cover'>): boolean =>
 export const ACCORDION_SECTIONS: AccordionSectionDef[] = [
   {
     id: 'team',
-    title: 'Our Team for this search mandate',
+    title: (s) => s.sectionTitles.team,
     skipInPublish: (deck) => isDisabled(deck, 'team'),
     skipInPreview: (deck) => isDisabled(deck, 'team'),
-    render: (deck, brand) => renderTeam(deck.sections.team, brand),
+    render: (deck, brand, strings) => renderTeam(deck.sections.team, brand, strings),
   },
   {
     id: 'searchProfile',
-    title: 'Search Profile: Must-Haves & Nice-to-Haves',
+    title: (s) => s.sectionTitles.searchProfile,
     skipInPublish: (deck) => isDisabled(deck, 'searchProfile'),
     skipInPreview: (deck) => isDisabled(deck, 'searchProfile'),
-    render: (deck, brand) => renderSearchProfile(deck.sections.searchProfile, brand),
+    render: (deck, brand, strings) =>
+      renderSearchProfile(deck.sections.searchProfile, brand, strings),
   },
   {
     id: 'salary',
-    title: 'Expected Salary Package',
+    title: (s) => s.sectionTitles.salary,
     skipInPublish: (deck) => isDisabled(deck, 'salary'),
     skipInPreview: (deck) => isDisabled(deck, 'salary'),
-    render: (deck, brand) => renderSalary(deck.sections.salary, brand),
+    render: (deck, brand, strings) => renderSalary(deck.sections.salary, brand, strings),
   },
   {
     id: 'credentials',
-    title: 'Credentials',
+    title: (s) => s.sectionTitles.credentials,
     skipInPublish: (deck) => isDisabled(deck, 'credentials'),
     skipInPreview: (deck) => isDisabled(deck, 'credentials'),
-    render: (deck, brand) => renderCredentials(deck.sections.credentials, brand),
+    render: (deck, brand, strings) =>
+      renderCredentials(deck.sections.credentials, brand, strings),
   },
   {
     id: 'timeline',
-    title: 'Process & Timeline',
+    title: (s) => s.sectionTitles.timeline,
     skipInPublish: (deck) => isDisabled(deck, 'timeline'),
     skipInPreview: (deck) => isDisabled(deck, 'timeline'),
-    render: (deck, brand) => renderTimeline(deck.sections.timeline, brand),
+    render: (deck, brand, strings) =>
+      renderTimeline(deck.sections.timeline, brand, strings),
   },
   {
     id: 'assessment',
-    title: 'Assessment',
+    title: (s) => s.sectionTitles.assessment,
     anchorId: 'assessment',
     skipInPublish: (deck) => isDisabled(deck, 'assessment'),
     skipInPreview: (deck) => isDisabled(deck, 'assessment'),
-    render: (deck, brand) => renderAssessment(deck.sections.assessment, brand),
+    render: (deck, brand, strings) =>
+      renderAssessment(deck.sections.assessment, brand, strings),
   },
   {
     id: 'personas',
-    title: 'Three Candidate Personas',
+    title: (s) => s.sectionTitles.personas,
     skipInPublish: (deck) => isDisabled(deck, 'personas'),
     skipInPreview: (deck) => isDisabled(deck, 'personas'),
-    render: (deck, brand) => renderPersonas(deck.sections.personas, brand),
+    render: (deck, brand, strings) =>
+      renderPersonas(deck.sections.personas, brand, strings),
   },
   {
     id: 'scorecard',
-    title: 'Selection Scorecard',
+    title: (s) => s.sectionTitles.scorecard,
     skipInPublish: (deck) => isDisabled(deck, 'scorecard'),
     skipInPreview: (deck) => isDisabled(deck, 'scorecard'),
-    render: (deck, brand) => renderScorecard(deck.sections.scorecard, brand),
+    render: (deck, brand, strings) =>
+      renderScorecard(deck.sections.scorecard, brand, strings),
   },
   {
     id: 'candidates',
-    title: 'Sample Candidates',
+    title: (s) => s.sectionTitles.candidates,
     anchorId: 'candidates',
     skipInPublish: (deck) => isDisabled(deck, 'candidates'),
     skipInPreview: (deck) => isDisabled(deck, 'candidates'),
-    render: (deck, brand, slugMap) =>
-      renderCandidates(deck.sections.candidates, brand, slugMap),
+    render: (deck, brand, strings, slugMap) =>
+      renderCandidates(deck.sections.candidates, brand, strings, slugMap),
   },
   {
     id: 'fee',
-    title: 'Fee Proposal',
+    title: (s) => s.sectionTitles.fee,
     bodyClassExtra: 'sb--centered',
     skipInPublish: (deck) => isDisabled(deck, 'fee'),
     skipInPreview: (deck) => isDisabled(deck, 'fee'),
-    render: (deck, brand) => renderFee(deck.sections.fee, brand),
+    render: (deck, brand, strings) => renderFee(deck.sections.fee, brand, strings),
   },
 ]
 
@@ -143,6 +155,7 @@ export type RenderMode = 'preview' | 'publish'
 export function renderAccordion(
   deck: Deck,
   brand: Brand,
+  strings: OutputStrings,
   slugMap: Map<string, string>,
   mode: RenderMode,
 ): string {
@@ -159,7 +172,7 @@ export function renderAccordion(
     visibleNumber++
     let body: string
     try {
-      body = section.render(deck, brand, slugMap)
+      body = section.render(deck, brand, strings, slugMap)
     } catch (err) {
       if (mode === 'publish') throw err
       const msg = err instanceof Error ? err.message : String(err)
@@ -169,7 +182,7 @@ export function renderAccordion(
     rendered.push(
       renderAccordionSection({
         number: visibleNumber,
-        title: section.title,
+        title: section.title(strings),
         anchorId: section.anchorId,
         bodyClassExtra: section.bodyClassExtra,
         open: visibleNumber === 1,

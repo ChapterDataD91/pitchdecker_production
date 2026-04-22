@@ -7,21 +7,32 @@
 
 import type { PersonasSection, Persona } from '@/lib/types'
 import type { Brand } from '../brand'
+import type { OutputStrings } from '../strings'
 import { esc } from '../primitives/escape'
 
-const POOL_LABEL: Record<Persona['poolSize'], string> = {
-  narrow: 'Narrow Pool',
-  moderate: 'Moderate Pool',
-  strong: 'Strong Pool',
+function poolLabel(poolSize: Persona['poolSize'], strings: OutputStrings): string {
+  switch (poolSize) {
+    case 'narrow':
+      return strings.poolNarrow
+    case 'moderate':
+      return strings.poolModerate
+    case 'strong':
+      return strings.poolStrong
+    default:
+      return strings.poolFallback
+  }
 }
 
-function renderPoolBadge(poolSize: Persona['poolSize']): string {
-  const label = POOL_LABEL[poolSize] ?? 'Pool'
+function renderPoolBadge(
+  poolSize: Persona['poolSize'],
+  strings: OutputStrings,
+): string {
+  const label = poolLabel(poolSize, strings)
   return `<span class="pool-badge pool-${esc(poolSize)}">${esc(label.toUpperCase())}</span>`
 }
 
-function renderPersona(persona: Persona): string {
-  const title = persona.title.trim() || 'Untitled persona'
+function renderPersona(persona: Persona, strings: OutputStrings): string {
+  const title = persona.title.trim() || strings.personaUntitled
   const description = persona.description.trim()
   const rangeLabel = persona.poolRangeLabel.trim()
   const rationale = persona.poolRationale.trim()
@@ -30,7 +41,7 @@ function renderPersona(persona: Persona): string {
 
   const poolLine = rangeLabel || rationale
     ? `<p style="margin-top:12px;color:var(--txt3);font-size:14px">
-  ${renderPoolBadge(persona.poolSize)}
+  ${renderPoolBadge(persona.poolSize, strings)}
   ${rangeLabel ? `${esc(rangeLabel)}.` : ''}${rangeLabel && rationale ? ' ' : ''}${rationale ? esc(rationale) : ''}
 </p>`
     : ''
@@ -42,15 +53,19 @@ function renderPersona(persona: Persona): string {
 </div>`
 }
 
-export function renderPersonas(data: PersonasSection, _brand: Brand): string {
+export function renderPersonas(
+  data: PersonasSection,
+  _brand: Brand,
+  strings: OutputStrings,
+): string {
   if (data.archetypes.length === 0) {
-    return `<div class="ot-empty">No persona archetypes added yet.</div>`
+    return `<div class="ot-empty">${esc(strings.personasEmpty)}</div>`
   }
 
   const sorted = [...data.archetypes].sort((a, b) => a.order - b.order)
 
-  const lead = `<p>Anonymised candidate personas illustrating the type of leader we expect to identify for this role.</p>`
-  const cards = sorted.map(renderPersona).join('\n')
+  const lead = `<p>${esc(strings.personasLead)}</p>`
+  const cards = sorted.map((p) => renderPersona(p, strings)).join('\n')
 
   return `${lead}${cards}`
 }

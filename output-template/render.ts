@@ -25,6 +25,8 @@ import type { RenderMode } from './layout'
 import { ensureUniqueSlugs } from './slug'
 import { renderCandidate } from './candidate/profile'
 import { esc } from './primitives/escape'
+import { getStrings } from './strings'
+import type { OutputStrings } from './strings'
 
 export interface RenderedCandidate {
   slug: string
@@ -44,16 +46,15 @@ export interface RenderOptions {
 function renderMainHtml(
   deck: Deck,
   brand: Brand,
+  strings: OutputStrings,
   slugMap: Map<string, string>,
   mode: RenderMode,
 ): string {
-  const title = `${brand.name} — ${deck.clientName || 'Proposal'}`
-  const description = `Strictly confidential executive search proposal${
-    deck.clientName ? ' for ' + deck.clientName : ''
-  }`
+  const title = `${brand.name} — ${deck.clientName || strings.fallbackProposal}`
+  const description = strings.metaDescription(deck.clientName)
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${deck.locale}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -69,16 +70,16 @@ ${primitivesCss}
 </head>
 <body>
 <div id="pc">
-${renderConfidentialityBar(brand)}
-${renderHero(deck, brand)}
+${renderConfidentialityBar(strings)}
+${renderHero(deck, brand, strings)}
 ${renderIntroSection(deck.sections.cover, brand)}
 <section class="secs"><div class="w">
-${renderAccordion(deck, brand, slugMap, mode)}
+${renderAccordion(deck, brand, strings, slugMap, mode)}
 </div></section>
 <div style="text-align:center;padding:20px 0">
   <a href="#" onclick="window.scrollTo({top:0,behavior:'smooth'});return false" style="display:inline-block;width:40px;height:40px;border-radius:50%;background:var(--bg2);color:var(--txt3);text-decoration:none;line-height:40px;font-size:18px;transition:all .3s" onmouseover="this.style.background='var(--blue)';this.style.color='#fff'" onmouseout="this.style.background='var(--bg2)';this.style.color='var(--txt3)'">↑</a>
 </div>
-${renderFooter(brand)}
+${renderFooter(brand, strings)}
 </div>
 <script>
 ${allScripts}
@@ -90,16 +91,17 @@ ${allScripts}
 export function renderDeck(deck: Deck, options: RenderOptions = {}): RenderResult {
   const brand = options.brand ?? defaultBrand
   const mode: RenderMode = options.mode ?? 'preview'
+  const strings = getStrings(deck.locale)
 
   const slugMap = ensureUniqueSlugs(deck.sections.candidates.candidates)
 
-  const html = renderMainHtml(deck, brand, slugMap, mode)
+  const html = renderMainHtml(deck, brand, strings, slugMap, mode)
 
   const candidates: RenderedCandidate[] = deck.sections.candidates.candidates.map((c) => {
     const slug = slugMap.get(c.id) ?? c.id
     return {
       slug,
-      html: renderCandidate(c, deck, slugMap, brand),
+      html: renderCandidate(c, deck, slugMap, brand, strings),
     }
   })
 

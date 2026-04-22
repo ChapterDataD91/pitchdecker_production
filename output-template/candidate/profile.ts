@@ -32,6 +32,7 @@ import { primitivesCss } from '../primitives'
 import { renderFooter, renderConfidentialityBar } from '../primitives/hero'
 import { allScripts } from '../scripts'
 import { esc, escAttr } from '../primitives/escape'
+import type { OutputStrings } from '../strings'
 
 // ---------------------------------------------------------------------------
 // Page-scoped CSS (only used inside the candidate page <style> block)
@@ -259,14 +260,18 @@ function renderHeaderPhoto(candidate: Candidate): string {
   return `<div class="header-photo-placeholder">${esc(getInitials(candidate.name))}</div>`
 }
 
-function renderHeader(candidate: Candidate, deck: Deck): string {
+function renderHeader(
+  candidate: Candidate,
+  deck: Deck,
+  strings: OutputStrings,
+): string {
   const ageSuffix = candidate.age && candidate.age > 0 ? ` (${esc(candidate.age)})` : ''
   const role = candidate.currentRole?.trim()
   const company = candidate.currentCompany?.trim()
   const linkedin = candidate.linkedinUrl?.trim()
 
   const roleLine = role && company
-    ? `${esc(role)} at ${linkedin ? `<a href="${escAttr(linkedin)}" target="_blank" rel="noopener noreferrer">${esc(company)}</a>` : esc(company)}`
+    ? `${esc(role)} ${esc(strings.cpRoleAt)} ${linkedin ? `<a href="${escAttr(linkedin)}" target="_blank" rel="noopener noreferrer">${esc(company)}</a>` : esc(company)}`
     : esc(role || company || '')
 
   const personaBadge = candidate.archetypeTag?.trim()
@@ -285,7 +290,7 @@ function renderHeader(candidate: Candidate, deck: Deck): string {
   </div>
   <div class="header-score">
     <div class="score-pct">${esc(score)}%</div>
-    <div class="score-label">Hard factors score</div>
+    <div class="score-label">${esc(strings.cpHardFactorsScore)}</div>
   </div>
 </header>`
 }
@@ -295,7 +300,10 @@ function renderSummary(candidate: Candidate): string {
   return `<div class="summary">${esc(candidate.summary)}</div>`
 }
 
-function renderCareerTable(history: readonly CareerEntry[] | undefined): string {
+function renderCareerTable(
+  history: readonly CareerEntry[] | undefined,
+  strings: OutputStrings,
+): string {
   if (!history || history.length === 0) return ''
   const rows = history
     .map((e) => {
@@ -310,13 +318,13 @@ function renderCareerTable(history: readonly CareerEntry[] | undefined): string 
 </tr>`
     })
     .join('')
-  return `<h3>Career Overview</h3>
+  return `<h3>${esc(strings.cpCareerOverview)}</h3>
 <table class="career-table">
   <thead><tr>
-    <th style="width:14%">Period</th>
-    <th style="width:22%">Role</th>
-    <th style="width:24%">Company</th>
-    <th style="width:40%">Highlights</th>
+    <th style="width:14%">${esc(strings.cpColPeriod)}</th>
+    <th style="width:22%">${esc(strings.cpColRole)}</th>
+    <th style="width:24%">${esc(strings.cpColCompany)}</th>
+    <th style="width:40%">${esc(strings.cpColHighlights)}</th>
   </tr></thead>
   <tbody>${rows}</tbody>
 </table>`
@@ -325,6 +333,7 @@ function renderCareerTable(history: readonly CareerEntry[] | undefined): string 
 function renderInfoGrid(
   education: readonly EducationEntry[] | undefined,
   languages: readonly string[] | undefined,
+  strings: OutputStrings,
 ): string {
   const hasEducation = education && education.length > 0
   const hasLanguages = languages && languages.length > 0
@@ -332,14 +341,14 @@ function renderInfoGrid(
 
   const educationCard = hasEducation
     ? `<div class="info-card">
-  <h3>Education</h3>
+  <h3>${esc(strings.cpEducation)}</h3>
   <ul>${education.map((e) => `<li>${esc(e.degree)} — ${esc(e.institution)} <span style="color:var(--txt3)">(${esc(e.period)})</span></li>`).join('')}</ul>
 </div>`
     : '<div></div>'
 
   const languagesCard = hasLanguages
     ? `<div class="info-card">
-  <h3>Languages</h3>
+  <h3>${esc(strings.cpLanguages)}</h3>
   <div class="lang-tags">${languages.map((l) => `<span class="lang-tag">${esc(l)}</span>`).join('')}</div>
 </div>`
     : '<div></div>'
@@ -347,7 +356,11 @@ function renderInfoGrid(
   return `<div class="info-grid">${educationCard}${languagesCard}</div>`
 }
 
-function renderHardFactorsScorecard(candidate: Candidate, deck: Deck): string {
+function renderHardFactorsScorecard(
+  candidate: Candidate,
+  deck: Deck,
+  strings: OutputStrings,
+): string {
   const scorecard = deck.sections.scorecard
   const hardFactorCriteria: ScorecardCriterion[] = [
     ...scorecard.mustHaves.map((c) => ({ ...c })),
@@ -381,11 +394,11 @@ function renderHardFactorsScorecard(candidate: Candidate, deck: Deck): string {
 
   if (!mustHaveRows && !niceToHaveRows) return ''
 
-  return `<h3>Scorecard — Hard Factors Only</h3>
+  return `<h3>${esc(strings.cpScorecardHardOnly)}</h3>
 <table class="scorecard">
   <tbody>
-    ${mustHaveRows ? `<tr><td colspan="4" class="sc-cat-header">Must-Haves</td></tr>${mustHaveRows}` : ''}
-    ${niceToHaveRows ? `<tr><td colspan="4" class="sc-cat-header">Nice-to-Haves</td></tr>${niceToHaveRows}` : ''}
+    ${mustHaveRows ? `<tr><td colspan="4" class="sc-cat-header">${esc(strings.scMustHaves)}</td></tr>${mustHaveRows}` : ''}
+    ${niceToHaveRows ? `<tr><td colspan="4" class="sc-cat-header">${esc(strings.scNiceToHaves)}</td></tr>${niceToHaveRows}` : ''}
   </tbody>
 </table>`
 }
@@ -407,8 +420,9 @@ export function renderCandidate(
   deck: Deck,
   slugMap: Map<string, string>,
   brand: Brand,
+  strings: OutputStrings,
 ): string {
-  const title = `${candidate.name} — ${deck.clientName || 'Proposal'}`
+  const title = `${candidate.name} — ${deck.clientName || strings.cpFallbackProposal}`
 
   const candidates = deck.sections.candidates.candidates
   const myIndex = candidates.findIndex((c) => c.id === candidate.id)
@@ -418,14 +432,14 @@ export function renderCandidate(
   const nextSlug = next ? slugMap.get(next.id) ?? next.id : null
 
   const navLeft = prevSlug
-    ? `<a href="${escAttr(prevSlug)}.html">← Previous</a>`
-    : `<span class="nav-disabled">← Previous</span>`
+    ? `<a href="${escAttr(prevSlug)}.html">${esc(strings.cpNavPrev)}</a>`
+    : `<span class="nav-disabled">${esc(strings.cpNavPrev)}</span>`
   const navRight = nextSlug
-    ? `<a href="${escAttr(nextSlug)}.html">Next →</a>`
-    : `<span class="nav-disabled">Next →</span>`
+    ? `<a href="${escAttr(nextSlug)}.html">${esc(strings.cpNavNext)}</a>`
+    : `<span class="nav-disabled">${esc(strings.cpNavNext)}</span>`
 
   const body = `<nav class="cand-nav">
-  <a href="../index.html">← Back to proposal</a>
+  <a href="../index.html">${esc(strings.cpNavBack)}</a>
   <span class="nav-sep">|</span>
   ${navLeft}
   <span class="nav-sep">|</span>
@@ -434,22 +448,22 @@ export function renderCandidate(
   ${navRight}
 </nav>
 <main class="cand-page">
-  ${renderHeader(candidate, deck)}
+  ${renderHeader(candidate, deck, strings)}
   ${renderSummary(candidate)}
-  ${renderCareerTable(candidate.careerHistory)}
-  ${renderInfoGrid(candidate.education, candidate.languages)}
-  ${renderHardFactorsScorecard(candidate, deck)}
-  ${renderTagBlock('Strengths', candidate.strengths)}
-  ${renderTagBlock('Risks / Considerations', candidate.risks, true)}
+  ${renderCareerTable(candidate.careerHistory, strings)}
+  ${renderInfoGrid(candidate.education, candidate.languages, strings)}
+  ${renderHardFactorsScorecard(candidate, deck, strings)}
+  ${renderTagBlock(strings.cpStrengths, candidate.strengths)}
+  ${renderTagBlock(strings.cpRisks, candidate.risks, true)}
 </main>`
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${deck.locale}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${esc(title)}</title>
-<meta name="description" content="Confidential candidate profile">
+<meta name="description" content="${esc(strings.cpMetaDescription)}">
 <meta name="robots" content="noindex, nofollow">
 ${brandFontLinks}
 <style>
@@ -461,9 +475,9 @@ ${candidatePageCss}
 </head>
 <body>
 <div id="pc">
-${renderConfidentialityBar(brand)}
+${renderConfidentialityBar(strings)}
 ${body}
-${renderFooter(brand)}
+${renderFooter(brand, strings)}
 </div>
 <script>
 ${allScripts}

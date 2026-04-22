@@ -5,6 +5,7 @@
 
 import type { SalarySection } from '@/lib/types'
 import type { Brand } from '../brand'
+import type { OutputStrings } from '../strings'
 import { esc } from '../primitives/escape'
 
 function formatEur(amount: number): string {
@@ -12,37 +13,59 @@ function formatEur(amount: number): string {
   return `€${amount.toLocaleString('en-GB').replace(/,/g, '\u202F')}`
 }
 
-function renderBase(low: number, high: number, isIndicative: boolean): string | null {
+function renderBase(
+  low: number,
+  high: number,
+  isIndicative: boolean,
+  strings: OutputStrings,
+): string | null {
   if (low <= 0 && high <= 0) return null
-  const suffix = isIndicative ? ' (indicative)' : ''
+  const suffix = isIndicative ? strings.salaryIndicativeSuffix : ''
   if (low > 0 && high > 0 && high !== low) {
-    return `${formatEur(low)} – ${formatEur(high)} gross per year${suffix}`
+    return `${formatEur(low)} – ${formatEur(high)} ${strings.salaryGrossPerYear}${suffix}`
   }
-  return `${formatEur(low > 0 ? low : high)} gross per year${suffix}`
+  return `${formatEur(low > 0 ? low : high)} ${strings.salaryGrossPerYear}${suffix}`
 }
 
-export function renderSalary(data: SalarySection, _brand: Brand): string {
+export function renderSalary(
+  data: SalarySection,
+  _brand: Brand,
+  strings: OutputStrings,
+): string {
   const lines: string[] = []
 
-  const base = renderBase(data.baseLow, data.baseHigh, data.isIndicative ?? false)
+  const base = renderBase(
+    data.baseLow,
+    data.baseHigh,
+    data.isIndicative ?? false,
+    strings,
+  )
   if (base) {
-    lines.push(`<p><strong>Base salary:</strong> ${esc(base)}</p>`)
+    lines.push(`<p><strong>${esc(strings.salaryBase)}:</strong> ${esc(base)}</p>`)
   }
   if (data.bonus.trim()) {
-    lines.push(`<p><strong>Annual bonus:</strong> ${esc(data.bonus)}</p>`)
+    lines.push(
+      `<p><strong>${esc(strings.salaryBonus)}:</strong> ${esc(data.bonus)}</p>`,
+    )
   }
   if (data.ltip.trim()) {
-    lines.push(`<p><strong>Long-Term Incentive (LTI):</strong> ${esc(data.ltip)}</p>`)
+    lines.push(
+      `<p><strong>${esc(strings.salaryLti)}:</strong> ${esc(data.ltip)}</p>`,
+    )
   }
   if (data.benefits.trim()) {
-    lines.push(`<p><strong>Benefits:</strong> ${esc(data.benefits)}</p>`)
+    lines.push(
+      `<p><strong>${esc(strings.salaryBenefits)}:</strong> ${esc(data.benefits)}</p>`,
+    )
   }
   if (data.other.trim()) {
-    lines.push(`<p><strong>Other:</strong> ${esc(data.other)}</p>`)
+    lines.push(
+      `<p><strong>${esc(strings.salaryOther)}:</strong> ${esc(data.other)}</p>`,
+    )
   }
 
   if (lines.length === 0) {
-    return `<div class="ot-empty">No salary details captured yet.</div>`
+    return `<div class="ot-empty">${esc(strings.salaryEmpty)}</div>`
   }
 
   return `<div class="bx">${lines.join('')}</div>`

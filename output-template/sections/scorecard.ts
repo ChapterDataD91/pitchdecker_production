@@ -10,6 +10,7 @@ import type {
   ScorecardCategoryKey,
 } from '@/lib/types'
 import type { Brand } from '../brand'
+import type { OutputStrings } from '../strings'
 import { esc } from '../primitives/escape'
 
 interface CategoryDef {
@@ -29,37 +30,34 @@ function renderCategoryBlock(cat: CategoryDef): string {
   return `${header}${rows}`
 }
 
-export function renderScorecard(data: ScorecardSection, _brand: Brand): string {
+export function renderScorecard(
+  data: ScorecardSection,
+  _brand: Brand,
+  strings: OutputStrings,
+): string {
   const hidden = new Set(data.hiddenCategories ?? [])
   const allCategories: CategoryDef[] = [
-    { key: 'mustHaves', label: 'Must-Haves', criteria: data.mustHaves },
-    { key: 'niceToHaves', label: 'Nice-to-Haves', criteria: data.niceToHaves },
-    { key: 'leadership', label: 'Leadership & Personality', criteria: data.leadership },
-    { key: 'successFactors', label: 'First-Year Success Factors', criteria: data.successFactors },
+    { key: 'mustHaves', label: strings.scMustHaves, criteria: data.mustHaves },
+    { key: 'niceToHaves', label: strings.scNiceToHaves, criteria: data.niceToHaves },
+    { key: 'leadership', label: strings.scLeadership, criteria: data.leadership },
+    { key: 'successFactors', label: strings.scSuccessFactors, criteria: data.successFactors },
   ]
   const categories = allCategories.filter((c) => !hidden.has(c.key))
 
   const total = categories.reduce((n, c) => n + c.criteria.length, 0)
   if (total === 0) {
-    return `<div class="ot-empty">No scorecard criteria added yet.</div>`
+    return `<div class="ot-empty">${esc(strings.scEmpty)}</div>`
   }
 
   const populated = categories.filter((c) => c.criteria.length > 0)
-  const dimensionsWord =
-    populated.length === 1
-      ? 'one dimension'
-      : populated.length === 2
-        ? 'two dimensions'
-        : populated.length === 3
-          ? 'three dimensions'
-          : `${populated.length} dimensions`
+  const dimensionsWord = strings.scDimensions(populated.length)
 
-  const header = `<p>We evaluate candidates on <strong>${esc(total)} weighted criteria</strong> across ${esc(dimensionsWord)}, scored 1–5. Weight reflects relative importance.</p>`
+  const header = `<p>${strings.scHeader(total, esc(dimensionsWord))}</p>`
 
   const rows = categories.map(renderCategoryBlock).join('')
 
   const table = `<table class="sc">
-  <thead><tr><th style="width:80%">Criterion</th><th style="width:20%;text-align:center">Weight</th></tr></thead>
+  <thead><tr><th style="width:80%">${esc(strings.scColCriterion)}</th><th style="width:20%;text-align:center">${esc(strings.scColWeight)}</th></tr></thead>
   <tbody>${rows}</tbody>
 </table>`
 

@@ -8,6 +8,7 @@
 
 import type { TeamSection, TeamMember } from '@/lib/types'
 import type { Brand } from '../brand'
+import type { OutputStrings } from '../strings'
 import { esc, escAttr } from '../primitives/escape'
 
 function getInitials(name: string): string {
@@ -38,11 +39,15 @@ function renderGrid(label: string, members: readonly TeamMember[]): string {
 <div class="team">${members.map(renderMember).join('')}</div>`
 }
 
-export function renderTeam(data: TeamSection, _brand: Brand): string {
+export function renderTeam(
+  data: TeamSection,
+  _brand: Brand,
+  strings: OutputStrings,
+): string {
   if (data.leadTeam.length === 0 && data.network.length === 0) {
-    return `<div class="ot-empty">No team members added yet.</div>`
+    return `<div class="ot-empty">${esc(strings.teamEmpty)}</div>`
   }
-  const lead = renderGrid('Lead Team', data.leadTeam)
-  const network = renderGrid('Building Upon Different Networks', data.network)
+  const lead = renderGrid(strings.teamLead, data.leadTeam)
+  const network = renderGrid(strings.teamNetwork, data.network)
   return [lead, network].filter(Boolean).join('\n')
 }

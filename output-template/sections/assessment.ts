@@ -16,6 +16,7 @@ import type {
   AssessmentMtBlock,
 } from '@/lib/types'
 import type { Brand } from '../brand'
+import type { OutputStrings } from '../strings'
 import { esc, escAttr } from '../primitives/escape'
 import { renderAvatar } from '../primitives/initials'
 
@@ -60,14 +61,9 @@ function renderProcess(data: AssessmentSection): string {
   return `<p>${esc(data.processDescription)}</p>`
 }
 
-function renderPurposes(data: AssessmentSection): string {
+function renderPurposes(data: AssessmentSection, strings: OutputStrings): string {
   if (data.purposes.length === 0) return ''
-  const intro = `<p>Assessment results serve ${
-    data.purposes.length === 2 ? 'two purposes' :
-    data.purposes.length === 3 ? 'three purposes' :
-    data.purposes.length === 4 ? 'four purposes' :
-    `${data.purposes.length} purposes`
-  }:</p>`
+  const intro = `<p>${esc(strings.asPurposesIntro(data.purposes.length))}</p>`
   const items = data.purposes.map((p) => `<li>${esc(p)}</li>`).join('')
   return `${intro}<ul>${items}</ul>`
 }
@@ -77,16 +73,23 @@ function renderCostsNote(data: AssessmentSection): string {
   return `<p>${esc(data.costsNote)}</p>`
 }
 
-function renderSampleReport(cta: AssessmentCta | null | undefined): string {
+function renderSampleReport(
+  cta: AssessmentCta | null | undefined,
+  strings: OutputStrings,
+): string {
   if (!cta || !cta.url.trim() || !cta.label.trim()) return ''
   return `<div style="margin-top:28px;padding:20px 24px;background:rgba(90,146,181,.05);border-left:3px solid var(--blue);border-radius:0 8px 8px 0">
-  <div style="font-size:12px;font-weight:600;color:var(--blue);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;font-family:var(--sans)">Sample Report</div>
-  <p style="font-size:17px;margin-bottom:12px;font-family:var(--sans)">A standard assessment produces a comprehensive personality profile mapped against the competencies required for the role, resulting in an overall match percentage and targeted development recommendations.</p>
+  <div style="font-size:12px;font-weight:600;color:var(--blue);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;font-family:var(--sans)">${esc(strings.asSampleReportBadge)}</div>
+  <p style="font-size:17px;margin-bottom:12px;font-family:var(--sans)">${esc(strings.asSampleReportBody)}</p>
   <a href="${escAttr(cta.url)}" style="display:inline-flex;align-items:center;gap:8px;padding:12px 20px;background:rgba(90,146,181,.1);border:1px solid rgba(90,146,181,.3);border-radius:6px;font-size:17px;font-weight:600;color:var(--blue);text-decoration:none;transition:all .2s;font-family:var(--sans)"><span style="font-size:18px">&#9671;</span> ${esc(cta.label)}</a>
 </div>`
 }
 
-function renderMtBlock(mt: AssessmentMtBlock | null | undefined, currency = 'EUR'): string {
+function renderMtBlock(
+  mt: AssessmentMtBlock | null | undefined,
+  strings: OutputStrings,
+  currency = 'EUR',
+): string {
   if (!mt || !mt.enabled) return ''
 
   const symbol = currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : currency === 'USD' ? '$' : `${currency} `
@@ -100,7 +103,7 @@ function renderMtBlock(mt: AssessmentMtBlock | null | undefined, currency = 'EUR
     : ''
 
   const investmentLine = formattedAmount
-    ? `<p style="font-size:17px;margin-bottom:14px;font-family:var(--sans)">The investment for a full management team assessment is <strong>${esc(formattedAmount)}</strong>.</p>`
+    ? `<p style="font-size:17px;margin-bottom:14px;font-family:var(--sans)">${strings.asMtInvestment(esc(formattedAmount))}</p>`
     : ''
 
   const cta = mt.ctaUrl.trim() && mt.ctaLabel.trim()
@@ -108,14 +111,18 @@ function renderMtBlock(mt: AssessmentMtBlock | null | undefined, currency = 'EUR
     : ''
 
   return `<div style="margin-top:24px;padding:20px 24px;background:rgba(196,168,122,.06);border-left:3px solid var(--sand);border-radius:0 8px 8px 0">
-  <div style="font-size:12px;font-weight:600;color:var(--sand);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;font-family:var(--sans)">Optional: Management Team Assessment</div>
+  <div style="font-size:12px;font-weight:600;color:var(--sand);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;font-family:var(--sans)">${esc(strings.asMtBadge)}</div>
   ${description}
   ${investmentLine}
   ${cta}
 </div>`
 }
 
-export function renderAssessment(data: AssessmentSection, _brand: Brand): string {
+export function renderAssessment(
+  data: AssessmentSection,
+  _brand: Brand,
+  strings: OutputStrings,
+): string {
   // Suppress the avatar primitive's unused-import warning when no real content
   void renderAvatar
 
@@ -123,7 +130,7 @@ export function renderAssessment(data: AssessmentSection, _brand: Brand): string
   // consultant sees their decision; in publish the layout skips this section
   // entirely via the `skipInPublish` hook.
   if (data.enabled === false) {
-    return `<div class="ot-empty">Assessment is not included in this deck.</div>`
+    return `<div class="ot-empty">${esc(strings.asNotIncluded)}</div>`
   }
 
   const noContent =
@@ -134,14 +141,14 @@ export function renderAssessment(data: AssessmentSection, _brand: Brand): string
     !data.costsNote.trim()
 
   if (noContent) {
-    return `<div class="ot-empty">No assessment details captured yet.</div>`
+    return `<div class="ot-empty">${esc(strings.asEmpty)}</div>`
   }
 
   return `${renderAssessorCard(data)}
 ${renderPillarBlock(data.pillars)}
 ${renderProcess(data)}
-${renderPurposes(data)}
+${renderPurposes(data, strings)}
 ${renderCostsNote(data)}
-${renderSampleReport(data.sampleReport)}
-${renderMtBlock(data.mtAssessment)}`
+${renderSampleReport(data.sampleReport, strings)}
+${renderMtBlock(data.mtAssessment, strings)}`
 }

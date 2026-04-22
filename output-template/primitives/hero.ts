@@ -14,6 +14,7 @@
 
 import type { Brand } from '../brand'
 import type { CoverSection, CoverStats, Deck } from '@/lib/types'
+import type { OutputStrings } from '../strings'
 import { esc, escAttr } from './escape'
 
 /**
@@ -191,12 +192,12 @@ function renderClientLogo(cover: CoverSection, location: 'hero' | 'intro'): stri
   return `<div class="client-logo-fallback">${esc(cover.clientName)}</div>`
 }
 
-export function renderHero(deck: Deck, brand: Brand): string {
+export function renderHero(deck: Deck, brand: Brand, strings: OutputStrings): string {
   const cover = deck.sections.cover
   const stats = deriveStats(deck)
   const heroImage = cover.heroImageUrl?.trim()
     ? `<img src="${escAttr(cover.heroImageUrl)}" alt="${escAttr(cover.roleTitle)}">`
-    : `<div class="hero-placeholder">Hero image</div>`
+    : `<div class="hero-placeholder">${esc(strings.heroImagePlaceholder)}</div>`
 
   const banner = cover.bannerImageUrl && cover.bannerImageUrl.trim() !== ''
     ? `<div class="hero-banner"><img src="${escAttr(cover.bannerImageUrl)}" alt="${escAttr(cover.clientName)}"></div>`
@@ -209,13 +210,13 @@ export function renderHero(deck: Deck, brand: Brand): string {
   return `<header class="hero">
   <div class="hero-left">
     <div class="hero-logo">${brand.logoSvg}</div>
-    <div class="badge">Executive Search Proposal</div>
-    <h1>${esc(cover.roleTitle || 'Role title')} for ${esc(cover.clientName || 'Client')}</h1>
+    <div class="badge">${esc(strings.heroBadge)}</div>
+    <h1>${esc(cover.roleTitle || strings.heroRoleFallback)} ${esc(strings.heroRoleFor)} ${esc(cover.clientName || strings.heroClientFallback)}</h1>
     ${tagline}
     <div class="meta">
-      <span><b>${esc(stats.criteriaCount)}</b> weighted criteria</span>
-      <span><b>${esc(stats.timelineWeeks)} weeks</b> total timeline</span>
-      <span><b>${esc(stats.candidateCount)}</b> candidate profiles</span>
+      <span><b>${esc(stats.criteriaCount)}</b> ${esc(strings.heroMetaWeightedCriteria)}</span>
+      <span><b>${esc(stats.timelineWeeks)} ${esc(strings.heroMetaTimelineUnit)}</b> ${esc(strings.heroMetaTimelineSuffix)}</span>
+      <span><b>${esc(stats.candidateCount)}</b> ${esc(strings.heroMetaCandidateProfiles)}</span>
     </div>
     ${renderClientLogo(cover, 'hero')}
   </div>
@@ -257,20 +258,20 @@ ${paragraphs}
 </div></section>`
 }
 
-export function renderConfidentialityBar(brand: Brand): string {
-  return `<div class="cb">${esc(brand.footer.confidentialityLabel)}</div>`
+export function renderConfidentialityBar(strings: OutputStrings): string {
+  return `<div class="cb">${esc(strings.confidentialityBar)}</div>`
 }
 
-export function renderFooter(brand: Brand): string {
+export function renderFooter(brand: Brand, strings: OutputStrings): string {
   const cities = brand.footer.cities
     .map((c, i) =>
       i === 0 ? esc(c) : `<span class="sep">|</span>${esc(c)}`,
     )
     .join(' ')
   return `<footer class="ft"><div class="w">
-  <p style="margin-bottom:8px"><strong style="color:var(--navy)">${esc(brand.name)}</strong> <span style="color:var(--txt3)">— Executive Search</span></p>
+  <p style="margin-bottom:8px"><strong style="color:var(--navy)">${esc(brand.name)}</strong> <span style="color:var(--txt3)">${esc(strings.footerExecutiveSearch)}</span></p>
   <p class="ft-cities">${cities}</p>
   <p class="ft-web"><a href="https://${escAttr(brand.footer.website)}" target="_blank" rel="noopener noreferrer" style="color:var(--sand);text-decoration:none;border-bottom:1px solid rgba(196,168,122,.3)">${esc(brand.footer.website)}</a></p>
-  <p class="ft-conf">${esc(brand.footer.confidentialityLabel.toUpperCase())}</p>
+  <p class="ft-conf">${esc(strings.confidentialityFooter)}</p>
 </div></footer>`
 }

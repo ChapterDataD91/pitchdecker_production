@@ -9,6 +9,7 @@
 
 import type { CredentialsSection, CredentialAxis, Placement } from '@/lib/types'
 import type { Brand } from '../brand'
+import type { OutputStrings } from '../strings'
 import { esc, escAttr } from '../primitives/escape'
 
 function renderCompanyCell(p: Placement): string {
@@ -24,9 +25,9 @@ function renderContextCell(p: Placement): string {
   return value ? esc(value) : '<span style="opacity:.5">—</span>'
 }
 
-function renderAxisTable(axis: CredentialAxis): string {
+function renderAxisTable(axis: CredentialAxis, strings: OutputStrings): string {
   if (axis.placements.length === 0) {
-    return '<p style="opacity:.6;font-style:normal">No placements added to this axis yet.</p>'
+    return `<p style="opacity:.6;font-style:normal">${esc(strings.credAxisPlacementsEmpty)}</p>`
   }
 
   const rows = axis.placements
@@ -41,29 +42,34 @@ function renderAxisTable(axis: CredentialAxis): string {
 
   return `<table class="tb">
   <thead><tr>
-    <th style="width:30%">Role</th>
-    <th style="width:35%">Company</th>
-    <th style="width:35%">${esc(axis.contextLabel || 'Context')}</th>
+    <th style="width:30%">${esc(strings.credRole)}</th>
+    <th style="width:35%">${esc(strings.credCompany)}</th>
+    <th style="width:35%">${esc(axis.contextLabel || strings.credContextFallback)}</th>
   </tr></thead>
   <tbody>${rows}</tbody>
 </table>`
 }
 
-function renderAxis(axis: CredentialAxis, index: number): string {
-  const label = axis.name.trim() || `Axis ${index + 1}`
+function renderAxis(
+  axis: CredentialAxis,
+  index: number,
+  strings: OutputStrings,
+): string {
+  const label = axis.name.trim() || strings.credAxisFallback(index + 1)
   const intro = axis.intro.trim() ? `<p>${esc(axis.intro)}</p>` : ''
   return `<div class="lb">${esc(label)}</div>
 ${intro}
-${renderAxisTable(axis)}`
+${renderAxisTable(axis, strings)}`
 }
 
 export function renderCredentials(
   data: CredentialsSection,
   _brand: Brand,
+  strings: OutputStrings,
 ): string {
   if (data.axes.length === 0) {
-    return `<div class="ot-empty">No credential axes added yet.</div>`
+    return `<div class="ot-empty">${esc(strings.credEmpty)}</div>`
   }
 
-  return data.axes.map((axis, i) => renderAxis(axis, i)).join('\n')
+  return data.axes.map((axis, i) => renderAxis(axis, i, strings)).join('\n')
 }

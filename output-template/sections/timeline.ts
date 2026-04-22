@@ -12,6 +12,7 @@
 
 import type { TimelineSection, TimelinePhase } from '@/lib/types'
 import type { Brand } from '../brand'
+import type { OutputStrings } from '../strings'
 import { esc } from '../primitives/escape'
 
 interface NumberedPhase {
@@ -41,16 +42,16 @@ function computePhaseSchedule(
   })
 }
 
-function deriveWeekRange(np: NumberedPhase): string {
+function deriveWeekRange(np: NumberedPhase, strings: OutputStrings): string {
   const { phase, weekStart, weekEnd } = np
   if (phase.weekRangeLabel?.trim()) return phase.weekRangeLabel.trim()
   if (weekStart === 0) return ''
-  if (weekStart === weekEnd) return `Week ${weekStart}`
-  return `Weeks ${weekStart}–${weekEnd}`
+  if (weekStart === weekEnd) return strings.tlWeekSingle(weekStart)
+  return strings.tlWeekRange(weekStart, weekEnd)
 }
 
-function renderActivePhase(np: NumberedPhase): string {
-  const range = deriveWeekRange(np)
+function renderActivePhase(np: NumberedPhase, strings: OutputStrings): string {
+  const range = deriveWeekRange(np, strings)
   const titleParts = [esc(np.phase.name)]
   if (range) titleParts.push(`— ${esc(range)}`)
   return `<div class="ti">
@@ -74,10 +75,11 @@ function renderHolidayPhase(np: NumberedPhase): string {
 </div>`
 }
 
-function renderHeader(data: TimelineSection): string {
+function renderHeader(data: TimelineSection, strings: OutputStrings): string {
   if (data.totalWeeks <= 0) return ''
-  const weekWord = data.totalWeeks === 1 ? 'week' : 'weeks'
-  return `<p>Total timeline: <strong>${esc(data.totalWeeks)} working ${esc(weekWord)}</strong>.</p>`
+  const weekWord =
+    data.totalWeeks === 1 ? strings.tlWorkingWeek : strings.tlWorkingWeeks
+  return `<p>${esc(strings.tlTotal)} <strong>${esc(data.totalWeeks)} ${esc(weekWord)}</strong>.</p>`
 }
 
 function renderConfidentialityBlock(data: TimelineSection): string {
@@ -86,19 +88,25 @@ function renderConfidentialityBlock(data: TimelineSection): string {
   return `<div class="gd"><p>${esc(note)}</p></div>`
 }
 
-export function renderTimeline(data: TimelineSection, _brand: Brand): string {
+export function renderTimeline(
+  data: TimelineSection,
+  _brand: Brand,
+  strings: OutputStrings,
+): string {
   if (data.phases.length === 0) {
-    return `<div class="ot-empty">No timeline phases added yet.</div>`
+    return `<div class="ot-empty">${esc(strings.tlEmpty)}</div>`
   }
 
   const schedule = computePhaseSchedule(data.phases)
   const items = schedule
     .map((np) =>
-      np.phase.kind === 'holiday' ? renderHolidayPhase(np) : renderActivePhase(np),
+      np.phase.kind === 'holiday'
+        ? renderHolidayPhase(np)
+        : renderActivePhase(np, strings),
     )
     .join('\n')
 
-  return `${renderHeader(data)}
+  return `${renderHeader(data, strings)}
 <div class="tl">${items}</div>
 ${renderConfidentialityBlock(data)}`
 }

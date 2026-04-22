@@ -9,15 +9,21 @@
 
 import type { SearchProfileSection, Criterion } from '@/lib/types'
 import type { Brand } from '../brand'
+import type { OutputStrings } from '../strings'
 import { esc } from '../primitives/escape'
 
-function renderCriteriaList(items: readonly Criterion[]): string {
-  if (items.length === 0) return '<li style="opacity:.5">None captured yet</li>'
+function renderCriteriaList(
+  items: readonly Criterion[],
+  placeholder: string,
+): string {
+  if (items.length === 0)
+    return `<li style="opacity:.5">${esc(placeholder)}</li>`
   return items.map((c) => `<li>${esc(c.text)}</li>`).join('')
 }
 
 function renderPersonalityProfile(
   profile: SearchProfileSection['personalityProfile'],
+  strings: OutputStrings,
 ): string {
   const hasIntro = profile.intro.trim().length > 0
   const hasTraits = profile.traits.length > 0
@@ -30,12 +36,13 @@ function renderPersonalityProfile(
         .join('')}</ul>`
     : ''
 
-  return `<div class="lb">Personality Profile</div>${intro}${traits}`
+  return `<div class="lb">${esc(strings.spPersonalityProfile)}</div>${intro}${traits}`
 }
 
 export function renderSearchProfile(
   data: SearchProfileSection,
   _brand: Brand,
+  strings: OutputStrings,
 ): string {
   const noProfile =
     data.mustHaves.length === 0 &&
@@ -44,18 +51,18 @@ export function renderSearchProfile(
     data.personalityProfile.traits.length === 0
 
   if (noProfile) {
-    return `<div class="ot-empty">No search profile captured yet.</div>`
+    return `<div class="ot-empty">${esc(strings.spEmpty)}</div>`
   }
 
   return `<div class="cols">
   <div class="cd">
-    <h4>Must-Haves</h4>
-    <ul>${renderCriteriaList(data.mustHaves)}</ul>
+    <h4>${esc(strings.spMustHaves)}</h4>
+    <ul>${renderCriteriaList(data.mustHaves, strings.spCriteriaPlaceholder)}</ul>
   </div>
   <div class="cd">
-    <h4>Nice-to-Haves</h4>
-    <ul>${renderCriteriaList(data.niceToHaves)}</ul>
+    <h4>${esc(strings.spNiceToHaves)}</h4>
+    <ul>${renderCriteriaList(data.niceToHaves, strings.spCriteriaPlaceholder)}</ul>
   </div>
 </div>
-${renderPersonalityProfile(data.personalityProfile)}`
+${renderPersonalityProfile(data.personalityProfile, strings)}`
 }
