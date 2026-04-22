@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { AISectionContext } from '@/lib/ai-types'
+import type { Locale } from '@/lib/types'
 import { analyzeWithClaude } from '@/lib/ai/claude-client'
-import { getAnalysisSystemPrompt } from '@/lib/ai/prompts'
+import { getAnalysisSystemPrompt, withLanguage } from '@/lib/ai/prompts'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { text, context, instruction } = body as { text: string; context: AISectionContext; instruction?: string }
+    const { text, context, instruction, locale } = body as {
+      text: string
+      context: AISectionContext
+      instruction?: string
+      locale?: Locale
+    }
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return NextResponse.json(
@@ -22,7 +28,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const systemPrompt = getAnalysisSystemPrompt(context)
+    const systemPrompt = withLanguage(getAnalysisSystemPrompt(context), locale)
     const userContent = instruction
       ? `${text}\n\n---\nAdditional instruction from the consultant: ${instruction}`
       : text

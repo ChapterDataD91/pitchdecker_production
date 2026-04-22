@@ -22,6 +22,7 @@ function formatBytes(bytes: number): string {
 
 export default function CoverEditor({ data, onChange }: CoverEditorProps) {
   const deckId = useEditorStore((s) => s.deck?.id ?? null)
+  const locale = useEditorStore((s) => s.deck?.locale ?? 'nl')
   const deckDocuments = useAIStore((s) => s.deckDocuments)
   const uploadDocument = useAIStore((s) => s.uploadDocument)
   const removeDocument = useAIStore((s) => s.removeDocument)
@@ -49,6 +50,7 @@ export default function CoverEditor({ data, onChange }: CoverEditorProps) {
             roleTitle: data.roleTitle,
             uploadedDocuments: docsForContext,
           },
+          locale,
         }),
       })
       if (!res.ok) {

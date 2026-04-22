@@ -83,6 +83,13 @@ export interface ChatMessage {
   sectionId: SectionId
   timestamp: string
   proposedChanges?: ProposedChange[]
+  // When an assistant message included a propose_changes tool call, we persist
+  // the tool_use_id and the raw input so we can replay the tool_use block in
+  // conversation history. Without this replay, Claude sees only the text
+  // preamble ("I'll shorten Jessica's bio") and on the next turn re-executes
+  // the change alongside the new request.
+  toolUseId?: string
+  toolUseInput?: unknown
   isStreaming?: boolean
 }
 
@@ -112,5 +119,7 @@ export interface ChatStreamEvent {
   type: 'text_delta' | 'tool_use' | 'done' | 'error'
   text?: string
   proposedChanges?: ProposedChange[]
+  toolUseId?: string
+  toolUseInput?: unknown
   message?: string
 }

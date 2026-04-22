@@ -26,7 +26,7 @@ async function decks(): Promise<Collection<DeckDoc>> {
 function stripId(doc: DeckDoc): Deck {
   const { _id, ...rest } = doc
   void _id
-  return rest
+  return { ...rest, locale: rest.locale ?? 'nl' }
 }
 
 // ---------------------------------------------------------------------------
@@ -46,6 +46,11 @@ function computeCompletedSections(deck: Deck): number {
 function isSectionComplete(deck: Deck, sectionId: SectionId): boolean {
   const s = deck.sections
 
+  // Any section explicitly excluded counts as complete — the consultant made a
+  // deliberate decision to skip it and publish shouldn't block on it.
+  const section = s[sectionId] as { enabled?: boolean }
+  if (section.enabled === false) return true
+
   switch (sectionId) {
     case 'cover':
       return s.cover.clientName.trim() !== '' && s.cover.roleTitle.trim() !== ''
@@ -60,8 +65,6 @@ function isSectionComplete(deck: Deck, sectionId: SectionId): boolean {
     case 'timeline':
       return s.timeline.phases.length > 0
     case 'assessment':
-      // Explicitly excluded → counts as complete; publish won't block on it.
-      if (s.assessment.enabled === false) return true
       return (
         s.assessment.assessor.name.trim() !== '' &&
         s.assessment.pillars.length > 0 &&

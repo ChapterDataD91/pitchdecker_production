@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import type { ChatMessage } from '@/lib/ai-types'
 import { SECTIONS } from '@/lib/theme'
+import { useEditorStore } from '@/lib/store/editor-store'
 import ProposedChangeCard from './ProposedChangeCard'
 import LoadingDots from '@/components/ui/LoadingDots'
 
@@ -154,8 +155,10 @@ export default function ChatMessageBubble({
   const isUser = message.role === 'user'
   const isAssistant = message.role === 'assistant'
   const showActions = isAssistant && !message.isStreaming && message.content
+  const locale = useEditorStore((s) => s.deck?.locale ?? 'nl')
   const sectionLabel =
-    SECTIONS.find((s) => s.id === message.sectionId)?.label ?? message.sectionId
+    SECTIONS.find((s) => s.id === message.sectionId)?.label[locale] ??
+    message.sectionId
 
   return (
     <motion.div

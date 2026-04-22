@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { AISectionContext, AIAnalysisResponse } from '@/lib/ai-types'
+import type { Locale } from '@/lib/types'
 import { analyzeWithClaude, getClaudeClient } from '@/lib/ai/claude-client'
-import { getAnalysisSystemPrompt } from '@/lib/ai/prompts'
+import { getAnalysisSystemPrompt, withLanguage } from '@/lib/ai/prompts'
 import {
   MAX_FILE_SIZE,
   getFileExtension,
@@ -146,9 +147,13 @@ export async function POST(request: NextRequest) {
     const instructionStr = formData.get('instruction')
     const instruction = typeof instructionStr === 'string' && instructionStr.trim() ? instructionStr.trim() : undefined
 
+    const localeStr = formData.get('locale')
+    const locale: Locale | undefined =
+      localeStr === 'en' || localeStr === 'nl' ? localeStr : undefined
+
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
-    const systemPrompt = getAnalysisSystemPrompt(context)
+    const systemPrompt = withLanguage(getAnalysisSystemPrompt(context), locale)
 
     let result: AIAnalysisResponse
 

@@ -85,20 +85,96 @@ export type Theme = typeof theme
 
 // ---------------------------------------------------------------------------
 // Section metadata — defines the 11 canonical deck sections
+//
+// Labels and descriptions are stored as { en, nl } pairs. Consumers pick the
+// language from `deck.locale`. Use `sectionLabel(section, locale)` and
+// `sectionDescription(section, locale)` to resolve.
 // ---------------------------------------------------------------------------
 
 export const SECTIONS = [
-  { id: 'cover', label: 'Cover', description: 'Introduction & hero image', order: 1 },
-  { id: 'team', label: 'Team', description: 'Search team composition', order: 2 },
-  { id: 'searchProfile', label: 'Search Profile', description: 'Must-haves & nice-to-haves', order: 3 },
-  { id: 'salary', label: 'Salary', description: 'Compensation package', order: 4 },
-  { id: 'credentials', label: 'Credentials', description: 'Relevant track record', order: 5 },
-  { id: 'timeline', label: 'Timeline', description: 'Process & milestones', order: 6 },
-  { id: 'assessment', label: 'Assessment', description: 'Evaluation methodology', order: 7 },
-  { id: 'personas', label: 'Personas', description: 'Candidate archetypes', order: 8 },
-  { id: 'scorecard', label: 'Scorecard', description: 'Weighted criteria', order: 9 },
-  { id: 'candidates', label: 'Candidates', description: 'Sample shortlist', order: 10 },
-  { id: 'fee', label: 'Fee Proposal', description: 'Pricing & terms', order: 11 },
+  {
+    id: 'cover',
+    label: { en: 'Cover', nl: 'Introductie' },
+    description: { en: 'Introduction & hero image', nl: 'Inleiding & hero-beeld' },
+    order: 1,
+  },
+  {
+    id: 'team',
+    label: { en: 'Team', nl: 'Team' },
+    description: { en: 'Search team composition', nl: 'Samenstelling searchteam' },
+    order: 2,
+  },
+  {
+    id: 'searchProfile',
+    label: { en: 'Search Profile', nl: 'Zoekprofiel' },
+    description: { en: 'Must-haves & nice-to-haves', nl: 'Must-haves & nice-to-haves' },
+    order: 3,
+  },
+  {
+    id: 'salary',
+    label: { en: 'Salary', nl: 'Salaris' },
+    description: { en: 'Compensation package', nl: 'Beloningspakket' },
+    order: 4,
+  },
+  {
+    id: 'credentials',
+    label: { en: 'Credentials', nl: 'Track record' },
+    description: { en: 'Relevant track record', nl: 'Relevante plaatsingen' },
+    order: 5,
+  },
+  {
+    id: 'timeline',
+    label: { en: 'Timeline', nl: 'Tijdlijn' },
+    description: { en: 'Process & milestones', nl: 'Proces & mijlpalen' },
+    order: 6,
+  },
+  {
+    id: 'assessment',
+    label: { en: 'Assessment', nl: 'Assessment' },
+    description: { en: 'Evaluation methodology', nl: 'Beoordelingsmethodiek' },
+    order: 7,
+  },
+  {
+    id: 'personas',
+    label: { en: 'Personas', nl: "Persona's" },
+    description: { en: 'Candidate archetypes', nl: 'Kandidaat-archetypen' },
+    order: 8,
+  },
+  {
+    id: 'scorecard',
+    label: { en: 'Scorecard', nl: 'Scorekaart' },
+    description: { en: 'Weighted criteria', nl: 'Gewogen criteria' },
+    order: 9,
+  },
+  {
+    id: 'candidates',
+    label: { en: 'Candidates', nl: 'Kandidaten' },
+    description: { en: 'Sample shortlist', nl: 'Voorbeeldshortlist' },
+    order: 10,
+  },
+  {
+    id: 'fee',
+    label: { en: 'Fee Proposal', nl: 'Fee voorstel' },
+    description: { en: 'Pricing & terms', nl: 'Tarief & voorwaarden' },
+    order: 11,
+  },
 ] as const
 
 export type SectionId = (typeof SECTIONS)[number]['id']
+
+export type SectionLocale = 'en' | 'nl'
+
+export type SectionMeta = (typeof SECTIONS)[number]
+
+export function sectionLabel(section: SectionMeta, locale: SectionLocale): string {
+  return section.label[locale]
+}
+
+export function sectionDescription(section: SectionMeta, locale: SectionLocale): string {
+  return section.description[locale]
+}
+
+export function getSectionLabel(id: SectionId, locale: SectionLocale): string {
+  const section = SECTIONS.find((s) => s.id === id)
+  return section ? section.label[locale] : id
+}

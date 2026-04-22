@@ -6,6 +6,8 @@
 
 import { NextResponse } from 'next/server'
 import { getClaudeClient } from '@/lib/ai/claude-client'
+import { withLanguage } from '@/lib/ai/prompts'
+import type { Locale } from '@/lib/types'
 
 interface RewriteRequest {
   memberName: string
@@ -17,6 +19,7 @@ interface RewriteRequest {
     roleTitle: string
     coverIntro?: string
   }
+  locale?: Locale
 }
 
 const RETURN_BIO_TOOL = {
@@ -82,7 +85,7 @@ export async function POST(request: Request) {
     const response = await claude.messages.create({
       model: 'claude-opus-4-6',
       max_tokens: 1024,
-      system: buildSystemPrompt(body),
+      system: withLanguage(buildSystemPrompt(body), body.locale),
       tools: [RETURN_BIO_TOOL],
       tool_choice: { type: 'tool', name: 'return_bio' },
       messages: [

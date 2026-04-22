@@ -1,9 +1,31 @@
 import type { AISectionContext, ChatContext } from '@/lib/ai-types'
-import type { CredentialAxis } from '@/lib/types'
+import type { CredentialAxis, Locale } from '@/lib/types'
 import {
   formatReferenceDocs,
   type ReferenceDoc,
 } from '@/lib/ai/reference-docs'
+
+// ---------------------------------------------------------------------------
+// Language directive — appended to every system prompt so Claude responds in
+// the deck's locale. Call `withLanguage(systemPrompt, locale)` in the route.
+// Proper nouns (client names, companies, role titles) are preserved verbatim
+// regardless of locale; JSON keys and tool names also stay English.
+// ---------------------------------------------------------------------------
+
+export function languageDirective(locale: Locale | undefined): string {
+  const effective: Locale = locale ?? 'nl'
+  if (effective === 'nl') {
+    return `\n\n## Taal\nSchrijf je antwoord in het Nederlands — natuurlijk, zakelijk Nederlands zoals een consultant van Top of Minds het zou schrijven, niet vertaald uit het Engels. Bewaar klantnamen, bedrijfsnamen, functietitels en andere eigennamen exact zoals ze zijn gegeven. Tool-namen en JSON-sleutels blijven Engels; alleen de tekstuele waarden (titels, beschrijvingen, rationale, paragrafen) komen in het Nederlands.`
+  }
+  return `\n\n## Language\nRespond in English — natural, professional English as written by a Top of Minds consultant. Preserve client names, company names, role titles, and other proper nouns verbatim. Tool names and JSON keys stay in English; only the human-readable string values (titles, descriptions, rationale, paragraphs) are translated.`
+}
+
+export function withLanguage(
+  systemPrompt: string,
+  locale: Locale | undefined,
+): string {
+  return systemPrompt + languageDirective(locale)
+}
 
 // ---------------------------------------------------------------------------
 // Credentials context types (used by credentials-specific prompts only)
@@ -287,12 +309,13 @@ When you find placements, use \`propose_changes\` to add them to the appropriate
 - When modifying timeline phases, recalculate \`totalWeeks\` as the sum of all \`durationWeeks\`
 
 ## How to help
-- When the user asks you to change, add, remove, or refine content, use the \`propose_changes\` tool.
-- Each proposed change targets a specific section and provides a partial data patch.
-- You can propose multiple changes in a single response.
-- When the user asks questions or wants advice, respond conversationally without using the tool.
-- Be direct and professional. No preamble — just help.
-- Understand the executive search domain: C-suite/senior roles, specific and measurable criteria.
+1. **Only act on the current user message.** Previous turns are history, not outstanding work. If a prior \`propose_changes\` tool_use appears in the transcript, it has already been handled — never re-emit it. The only exception is when the user explicitly asks you to redo it.
+2. **One request = one action.** If the user asks you to edit Duco's bio, edit only Duco's bio. Do not also re-edit Jessica because you touched her earlier — that change is done.
+3. Confirm in past tense, not future tense. Prefer "Done — Duco's bio shortened." over "I'll shorten Duco's bio." Future-tense preambles read as unfinished commitments.
+4. When the user asks you to change, add, remove, or refine content, use the \`propose_changes\` tool. Each proposed change targets a specific section and provides a partial data patch. You can propose multiple changes in a single response when the user clearly asked for multiple things.
+5. When the user asks questions or wants advice, respond conversationally without using the tool.
+6. Be direct and professional. No preamble — just help.
+7. Understand the executive search domain: C-suite/senior roles, specific and measurable criteria.
 
 ## Quality bar for search profile and scorecard criteria
 When you add or rewrite criteria in \`searchProfile\` or \`scorecard\`, hold the same discipline as the starter drafts:
@@ -304,8 +327,6 @@ When you add or rewrite criteria in \`searchProfile\` or \`scorecard\`, hold the
 - **No fabrication**: don't invent competitors, metrics, or initiatives not present in the context.
 
 ## Important
-- **Only change what the user asked for.** If they ask for a personality profile, do NOT also re-edit the criteria. One request = one type of change.
-- Never re-propose changes that were already applied in the conversation.
 - Never fabricate data about the client or role — work with what exists or ask for clarification.
 - If the user's request is ambiguous, ask a clarifying question rather than guessing.`
 }

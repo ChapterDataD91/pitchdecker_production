@@ -176,6 +176,7 @@ export default function CandidatesEditor({
             roleTitle: deck.sections.cover.roleTitle || deck.roleTitle,
             coverIntro: deck.sections.cover.introParagraph || undefined,
           },
+          locale: deck.locale,
         }),
       })
       if (!res.ok) {
@@ -227,52 +228,15 @@ export default function CandidatesEditor({
   const unscoredCount = data.candidates.filter(
     (c) => c.overallScore === 0,
   ).length
-  const isEnabled = data.enabled !== false
 
-  const includeToggle = (
-    <div className="flex items-center justify-between rounded-lg border border-border bg-bg-subtle px-4 py-2.5">
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-text">
-          Include Sample Candidates in this deck
-        </p>
-        <p className="mt-0.5 text-xs text-text-tertiary">
-          {isEnabled
-            ? 'This section will appear in the preview and published deck.'
-            : 'This section is excluded — it will NOT appear in the preview or published deck.'}
-        </p>
-      </div>
-      <label className="relative inline-flex shrink-0 cursor-pointer items-center">
-        <input
-          type="checkbox"
-          checked={isEnabled}
-          onChange={(e) => onChange({ ...data, enabled: e.target.checked })}
-          className="peer sr-only"
-        />
-        <div
-          className="
-            h-6 w-11 rounded-full bg-border-strong
-            peer-checked:bg-accent
-            transition-colors
-            after:content-[''] after:absolute after:top-0.5 after:left-0.5
-            after:h-5 after:w-5 after:rounded-full after:bg-white
-            after:shadow-sm after:transition-transform
-            peer-checked:after:translate-x-5
-          "
-        />
-      </label>
-    </div>
-  )
+  // Include/exclude is now a toggle in the section header, rendered by the
+  // deck editor page. When excluded, the editor isn't mounted at all.
 
   if (!hasCandidates && !hasPending) {
     return (
       <div className="space-y-4">
-        {includeToggle}
-        {isEnabled && (
-          <>
-            <UploadZone variant="hero" onFilesSelected={handleFiles} />
-            <QueryDatabaseStub />
-          </>
-        )}
+        <UploadZone variant="hero" onFilesSelected={handleFiles} />
+        <QueryDatabaseStub />
       </div>
     )
   }
@@ -286,7 +250,6 @@ export default function CandidatesEditor({
 
   return (
     <div className="space-y-4">
-      {includeToggle}
       <UploadZone variant="compact" onFilesSelected={handleFiles} />
 
       {/* Toolbar — score all */}

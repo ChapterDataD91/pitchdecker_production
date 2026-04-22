@@ -7,11 +7,16 @@
 
 import { NextResponse } from 'next/server'
 import { getClaudeClient } from '@/lib/ai/claude-client'
-import { getScorecardSystemPrompt, type ScorecardContext } from '@/lib/ai/prompts'
-import type { Weight } from '@/lib/types'
+import {
+  getScorecardSystemPrompt,
+  withLanguage,
+  type ScorecardContext,
+} from '@/lib/ai/prompts'
+import type { Locale, Weight } from '@/lib/types'
 
 interface SuggestRequest {
   deckContext: ScorecardContext
+  locale?: Locale
 }
 
 interface DraftCriterion {
@@ -87,7 +92,10 @@ export async function POST(request: Request) {
     }
 
     const claude = getClaudeClient()
-    const systemPrompt = getScorecardSystemPrompt(body.deckContext)
+    const systemPrompt = withLanguage(
+      getScorecardSystemPrompt(body.deckContext),
+      body.locale,
+    )
 
     const response = await claude.messages.create({
       model: 'claude-opus-4-6',

@@ -117,9 +117,8 @@ export default function AssessmentEditor({ data, onChange }: AssessmentEditorPro
   const [templateApplied, setTemplateApplied] = useState(false)
   const team = useEditorStore((s) => s.deck?.sections.team)
 
-  // Treat old decks (no `enabled` field) as enabled. Only explicit false means
-  // the consultant opted out of offering an assessment in this deck.
-  const enabled = data.enabled !== false
+  // Include/exclude is handled by the toggle in the section header — when
+  // excluded, the parent doesn't mount this editor.
   const empty = isEmpty(data)
 
   // Backfill the assessor photo when the name matches a known team member.
@@ -174,16 +173,6 @@ export default function AssessmentEditor({ data, onChange }: AssessmentEditorPro
     clearUndo()
   }
 
-  function excludeAssessment() {
-    clearUndo()
-    onChange({ ...data, enabled: false })
-  }
-
-  function includeAssessment() {
-    clearUndo()
-    onChange({ ...data, enabled: true })
-  }
-
   // -- Assessor ----------------------------------------------------------
 
   function updateAssessor(patch: Partial<AssessmentSection['assessor']>) {
@@ -234,33 +223,6 @@ export default function AssessmentEditor({ data, onChange }: AssessmentEditorPro
 
   // -- Render ------------------------------------------------------------
 
-  if (!enabled) {
-    return (
-      <div className="space-y-4">
-        <div className="rounded-lg border border-border bg-bg-subtle p-6 flex items-start gap-4">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-bg-muted">
-            <svg className="h-4 w-4 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-            </svg>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-text">Assessment not included in this deck</p>
-            <p className="mt-1 text-xs text-text-secondary">
-              The assessment step will be omitted from the published deck. Any content you had is preserved — include it again to restore.
-            </p>
-            <button
-              type="button"
-              onClick={includeAssessment}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium text-text hover:border-accent hover:text-accent transition-colors"
-            >
-              Include assessment
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   if (empty) {
     return (
       <div className="space-y-3">
@@ -283,14 +245,6 @@ export default function AssessmentEditor({ data, onChange }: AssessmentEditorPro
           <svg className="h-5 w-5 text-text-tertiary group-hover:text-accent transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
           </svg>
-        </button>
-
-        <button
-          type="button"
-          onClick={excludeAssessment}
-          className="block mx-auto text-xs text-text-tertiary hover:text-text-secondary transition-colors"
-        >
-          Don&apos;t offer assessment in this deck
         </button>
       </div>
     )
@@ -491,14 +445,7 @@ export default function AssessmentEditor({ data, onChange }: AssessmentEditorPro
       </section>
 
       {/* Secondary actions */}
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={excludeAssessment}
-          className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
-        >
-          Exclude from deck
-        </button>
+      <div className="flex items-center justify-end">
         <button
           type="button"
           onClick={applyTemplate}

@@ -5,11 +5,101 @@ import { useAIStore } from '@/lib/store/ai-store'
 import { useEditorStore } from '@/lib/store/editor-store'
 import { buildChatContext } from '@/lib/ai/chat-context'
 import type { SectionId } from '@/lib/theme'
-import type { ProposedChange, ChatStreamEvent } from '@/lib/ai-types'
+import type {
+  ChatEntry,
+  ChatMessage,
+  ProposedChange,
+  ChatStreamEvent,
+} from '@/lib/ai-types'
 
 interface UseChatStreamReturn {
   sendMessage: (content: string) => Promise<void>
   cancelStream: () => void
+}
+
+// Anthropic message-block shapes we emit when replaying tool calls.
+type TextBlock = { type: 'text'; text: string }
+type ToolUseBlock = {
+  type: 'tool_use'
+  id: string
+  name: string
+  input: unknown
+}
+type ToolResultBlock = {
+  type: 'tool_result'
+  tool_use_id: string
+  content: string
+}
+type ApiContent = string | Array<TextBlock | ToolUseBlock | ToolResultBlock>
+type ApiMessage = { role: 'user' | 'assistant'; content: ApiContent }
+
+function toolResultContent(changes: ProposedChange[]): string {
+  return changes
+    .map((c) => {
+      const verb =
+        c.status === 'accepted'
+          ? 'Applied'
+          : c.status === 'dismissed'
+            ? 'Dismissed by consultant — do not re-propose'
+            : 'Pending consultant review — do not re-propose'
+      return `${verb}: ${c.description}`
+    })
+    .join('\n')
+}
+
+// Rebuild conversation history so Claude sees the full tool_use / tool_result
+// lifecycle, not just the text preamble. Without this, prior propose_changes
+// turns look like unfinished promises and Claude re-executes them on the next
+// user message.
+function buildApiMessages(entries: ChatEntry[]): ApiMessage[] {
+  const msgs = entries.filter(
+    (e): e is ChatMessage => e.type === 'message',
+  )
+  const out: ApiMessage[] = []
+  let pendingToolResult: ToolResultBlock | null = null
+
+  for (const msg of msgs) {
+    if (msg.role === 'assistant') {
+      const hasToolCall =
+        !!msg.toolUseId && !!msg.proposedChanges?.length
+      if (hasToolCall) {
+        const blocks: Array<TextBlock | ToolUseBlock> = []
+        if (msg.content) blocks.push({ type: 'text', text: msg.content })
+        blocks.push({
+          type: 'tool_use',
+          id: msg.toolUseId!,
+          name: 'propose_changes',
+          input: msg.toolUseInput ?? { changes: msg.proposedChanges },
+        })
+        out.push({ role: 'assistant', content: blocks })
+        pendingToolResult = {
+          type: 'tool_result',
+          tool_use_id: msg.toolUseId!,
+          content: toolResultContent(msg.proposedChanges!),
+        }
+      } else {
+        // Plain text assistant turn — no tool call to close.
+        out.push({ role: 'assistant', content: msg.content })
+      }
+    } else {
+      // User turn. If there's an unclosed tool_result, merge it in front of
+      // the user's text so the turn satisfies Anthropic's alternation rule.
+      if (pendingToolResult) {
+        out.push({
+          role: 'user',
+          content: [
+            pendingToolResult,
+            { type: 'text', text: msg.content },
+          ],
+        })
+        pendingToolResult = null
+      } else {
+        out.push({ role: 'user', content: msg.content })
+      }
+    }
+  }
+
+  return out
 }
 
 export function useChatStream(): UseChatStreamReturn {
@@ -25,16 +115,10 @@ export function useChatStream(): UseChatStreamReturn {
     // Add user message
     aiStore.addUserMessage(content, activeSection as SectionId)
 
-    // Build conversation history (filter out dividers, map to API format)
+    // Build conversation history — expands prior propose_changes turns into
+    // tool_use + tool_result block pairs so Claude doesn't re-execute them.
     const updatedMessages = useAIStore.getState().chatMessages
-    const apiMessages = updatedMessages
-      .filter((entry): entry is Extract<typeof entry, { type: 'message' }> =>
-        entry.type === 'message',
-      )
-      .map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-      }))
+    const apiMessages = buildApiMessages(updatedMessages)
 
     // Build context (includes uploaded documents from store)
     const { deckDocuments } = useAIStore.getState()
@@ -51,7 +135,11 @@ export function useChatStream(): UseChatStreamReturn {
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiMessages, context }),
+        body: JSON.stringify({
+          messages: apiMessages,
+          context,
+          locale: deck.locale,
+        }),
         signal: controller.signal,
       })
 
@@ -64,7 +152,9 @@ export function useChatStream(): UseChatStreamReturn {
 
       const decoder = new TextDecoder()
       let buffer = ''
-      let collectedChanges: ProposedChange[] = []
+      const collectedChanges: ProposedChange[] = []
+      let collectedToolUseId: string | undefined
+      let collectedToolUseInput: unknown
 
       while (true) {
         const { done, value } = await reader.read()
@@ -100,6 +190,10 @@ export function useChatStream(): UseChatStreamReturn {
                 if (event.proposedChanges) {
                   collectedChanges.push(...event.proposedChanges)
                 }
+                if (event.toolUseId) {
+                  collectedToolUseId = event.toolUseId
+                  collectedToolUseInput = event.toolUseInput
+                }
                 break
 
               case 'error':
@@ -124,6 +218,8 @@ export function useChatStream(): UseChatStreamReturn {
         .finalizeAssistantMessage(
           assistantId,
           collectedChanges.length > 0 ? collectedChanges : undefined,
+          collectedToolUseId,
+          collectedToolUseInput,
         )
       useAIStore.getState().persistChat()
     } catch (err) {

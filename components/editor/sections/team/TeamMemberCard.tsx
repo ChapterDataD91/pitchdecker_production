@@ -47,6 +47,7 @@ export default function TeamMemberCard({
             roleTitle: cover.roleTitle || deck.roleTitle,
             coverIntro: cover.introParagraph || undefined,
           },
+          locale: deck.locale,
         }),
       })
       if (!res.ok) {

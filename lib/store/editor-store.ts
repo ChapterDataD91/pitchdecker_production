@@ -4,7 +4,13 @@
 // ---------------------------------------------------------------------------
 
 import { create } from 'zustand'
-import type { Candidate, Deck, DeckSections, SectionStatus } from '@/lib/types'
+import type {
+  Candidate,
+  Deck,
+  DeckSections,
+  Locale,
+  SectionStatus,
+} from '@/lib/types'
 import type { SectionId } from '@/lib/theme'
 import { SECTIONS } from '@/lib/theme'
 
@@ -38,6 +44,7 @@ interface EditorActions {
   setSaveStatus: (status: SaveStatus) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
+  setLocale: (locale: Locale) => void
   getSectionStatus: (sectionId: SectionId) => SectionStatus
   getCompletedCount: () => number
 }
@@ -73,6 +80,12 @@ function recomputeRankings(candidates: Candidate[]): Candidate[] {
 function computeSectionStatus(deck: Deck, sectionId: SectionId): SectionStatus {
   const s = deck.sections
 
+  // Any section explicitly excluded from the deck counts as complete — the
+  // consultant has made a deliberate decision to skip it. (Cover has no
+  // `enabled` flag so this check is a no-op for it.)
+  const section = s[sectionId] as { enabled?: boolean }
+  if (section.enabled === false) return 'complete'
+
   switch (sectionId) {
     case 'cover': {
       const hasBoth = s.cover.clientName.trim() !== '' && s.cover.roleTitle.trim() !== ''
@@ -84,8 +97,16 @@ function computeSectionStatus(deck: Deck, sectionId: SectionId): SectionStatus {
       return s.team.leadTeam.length > 0 ? 'complete' : 'empty'
     case 'searchProfile':
       return s.searchProfile.mustHaves.length > 0 ? 'complete' : 'empty'
-    case 'salary':
-      return s.salary.baseLow !== 0 ? 'complete' : 'empty'
+    case 'salary': {
+      const sal = s.salary
+      const hasRange = sal.baseLow !== 0 || sal.baseHigh !== 0
+      const hasText =
+        sal.bonus.trim() !== '' ||
+        sal.ltip.trim() !== '' ||
+        sal.benefits.trim() !== '' ||
+        sal.other.trim() !== ''
+      return hasRange || hasText ? 'complete' : 'empty'
+    }
     case 'credentials': {
       if (s.credentials.axes.length === 0) return 'empty'
       const hasPlacement = s.credentials.axes.some((a) => a.placements.length > 0)
@@ -95,9 +116,6 @@ function computeSectionStatus(deck: Deck, sectionId: SectionId): SectionStatus {
       return s.timeline.phases.length > 0 ? 'complete' : 'empty'
     case 'assessment': {
       const a = s.assessment
-      // Explicitly excluded counts as complete — the consultant has made a
-      // deliberate decision not to offer an assessment step.
-      if (a.enabled === false) return 'complete'
       const hasAny =
         a.assessor.name.trim() !== '' ||
         a.pillars.length > 0 ||
@@ -238,6 +256,33 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   setLoading: (loading) => set({ isLoading: loading }),
 
   setError: (error) => set({ error }),
+
+  setLocale: (locale) => {
+    const { deck } = get()
+    if (!deck || deck.locale === locale) return
+
+    const updatedDeck: Deck = {
+      ...deck,
+      locale,
+      updatedAt: new Date().toISOString(),
+    }
+    set({ deck: updatedDeck, saveStatus: 'saving' })
+
+    // Persist via deck metadata endpoint (not section data)
+    void fetch(`/api/deck/${deck.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ locale }),
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`Save failed: ${response.status}`)
+        set({ saveStatus: 'saved' })
+      })
+      .catch((err) => {
+        console.error('Locale save failed:', err)
+        set({ saveStatus: 'error' })
+      })
+  },
 
   getSectionStatus: (sectionId) => {
     const { deck } = get()

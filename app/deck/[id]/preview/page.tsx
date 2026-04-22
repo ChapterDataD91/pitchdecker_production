@@ -59,6 +59,7 @@ export default async function PreviewPage({
       deckId={id}
       deckTitle={`${deck.clientName || 'Untitled'} — ${deck.roleTitle || 'Proposal'}`}
       clientName={deck.clientName || ''}
+      locale={deck.locale}
       sectionStatuses={liveSectionStatuses}
       mainHtml={result.html}
       candidates={result.candidates.map((c, i) => ({

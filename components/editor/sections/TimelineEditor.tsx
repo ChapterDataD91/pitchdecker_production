@@ -204,6 +204,7 @@ export default function TimelineEditor({ data, onChange }: TimelineEditorProps) 
               extractedText: d.extractedText,
             })),
           },
+          locale: deck.locale,
         }),
       })
 

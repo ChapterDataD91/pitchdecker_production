@@ -8,11 +8,14 @@ import { NextResponse } from 'next/server'
 import { getClaudeClient } from '@/lib/ai/claude-client'
 import {
   getCoverStarterSystemPrompt,
+  withLanguage,
   type CoverStarterContext,
 } from '@/lib/ai/prompts'
+import type { Locale } from '@/lib/types'
 
 interface SuggestRequest {
   deckContext: CoverStarterContext
+  locale?: Locale
 }
 
 interface DraftResponse {
@@ -54,7 +57,10 @@ export async function POST(request: Request) {
     }
 
     const claude = getClaudeClient()
-    const systemPrompt = getCoverStarterSystemPrompt(body.deckContext)
+    const systemPrompt = withLanguage(
+      getCoverStarterSystemPrompt(body.deckContext),
+      body.locale,
+    )
 
     const response = await claude.messages.create({
       model: 'claude-sonnet-4-6',

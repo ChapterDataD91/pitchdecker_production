@@ -132,7 +132,12 @@ interface AIActions {
   addUserMessage: (content: string, sectionId: SectionId) => void
   startAssistantMessage: (sectionId: SectionId) => string
   appendToAssistantMessage: (id: string, chunk: string) => void
-  finalizeAssistantMessage: (id: string, proposedChanges?: ProposedChange[]) => void
+  finalizeAssistantMessage: (
+    id: string,
+    proposedChanges?: ProposedChange[],
+    toolUseId?: string,
+    toolUseInput?: unknown,
+  ) => void
   addSectionDivider: (sectionId: SectionId) => void
   acceptProposedChange: (messageId: string, changeId: string) => void
   dismissProposedChange: (messageId: string, changeId: string) => void
@@ -332,12 +337,18 @@ export const useAIStore = create<AIStore>((set, get) => ({
       ),
     })),
 
-  finalizeAssistantMessage: (id, proposedChanges) =>
+  finalizeAssistantMessage: (id, proposedChanges, toolUseId, toolUseInput) =>
     set((s) => ({
       chatIsStreaming: false,
       chatMessages: s.chatMessages.map((entry) =>
         entry.type === 'message' && entry.id === id
-          ? { ...entry, isStreaming: false, proposedChanges }
+          ? {
+              ...entry,
+              isStreaming: false,
+              proposedChanges,
+              toolUseId,
+              toolUseInput,
+            }
           : entry,
       ),
     })),
@@ -350,7 +361,9 @@ export const useAIStore = create<AIStore>((set, get) => ({
     // Don't add if last entry is already any divider (no messages between dividers)
     if (last.type === 'section-divider') return
 
-    const label = SECTIONS.find((s) => s.id === sectionId)?.label ?? sectionId
+    const locale = useEditorStore.getState().deck?.locale ?? 'nl'
+    const label =
+      SECTIONS.find((s) => s.id === sectionId)?.label[locale] ?? sectionId
     set((s) => ({
       chatMessages: [
         ...s.chatMessages,
@@ -598,6 +611,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
               extractedText: d.extractedText,
             })),
           },
+          locale: deck.locale,
         }),
       })
       if (!res.ok) {

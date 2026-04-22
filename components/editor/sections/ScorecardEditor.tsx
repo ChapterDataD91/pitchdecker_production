@@ -228,6 +228,7 @@ export default function ScorecardEditor({
               extractedText: d.extractedText,
             })),
           },
+          locale: deck.locale,
         }),
       })
       if (!res.ok) {

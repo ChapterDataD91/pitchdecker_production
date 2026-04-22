@@ -1,8 +1,9 @@
 import { NextRequest } from 'next/server'
 import type Anthropic from '@anthropic-ai/sdk'
 import { getClaudeClient } from '@/lib/ai/claude-client'
-import { getChatSystemPrompt } from '@/lib/ai/prompts'
+import { getChatSystemPrompt, withLanguage } from '@/lib/ai/prompts'
 import type { ChatContext } from '@/lib/ai-types'
+import type { Locale } from '@/lib/types'
 import { getCiceroClient } from '@/lib/mcp/cicero-client'
 
 const MAX_TOOL_ITERATIONS = 8
@@ -118,9 +119,11 @@ export async function POST(request: NextRequest) {
     const {
       messages,
       context,
+      locale,
     }: {
       messages: Array<{ role: 'user' | 'assistant'; content: string }>
       context: ChatContext
+      locale?: Locale
     } = body
 
     if (!messages || !context) {
@@ -132,7 +135,7 @@ export async function POST(request: NextRequest) {
 
     const isCredentials = context.sectionType === 'credentials'
     const claude = getClaudeClient()
-    const systemPrompt = getChatSystemPrompt(context)
+    const systemPrompt = withLanguage(getChatSystemPrompt(context), locale)
 
     // Build tools list — include cicero tools for credentials
     const tools: Anthropic.Messages.Tool[] = [PROPOSE_CHANGES_TOOL]
@@ -219,6 +222,7 @@ async function handleStandardChat(
   })
 
   let currentToolName: string | null = null
+  let currentToolId: string | null = null
   let toolInput = ''
 
   for await (const event of response) {
@@ -226,6 +230,7 @@ async function handleStandardChat(
       case 'content_block_start': {
         if (event.content_block.type === 'tool_use') {
           currentToolName = event.content_block.name
+          currentToolId = event.content_block.id
           toolInput = ''
         }
         break
@@ -241,10 +246,11 @@ async function handleStandardChat(
       }
 
       case 'content_block_stop': {
-        if (currentToolName === 'propose_changes' && toolInput) {
-          emitProposedChanges(toolInput, sendEvent)
+        if (currentToolName === 'propose_changes' && currentToolId && toolInput) {
+          emitProposedChanges(currentToolId, toolInput, sendEvent)
         }
         currentToolName = null
+        currentToolId = null
         toolInput = ''
         break
       }
@@ -303,7 +309,11 @@ async function handleCredentialsChat(
     // Check for propose_changes — emit it and we're done
     const proposeChanges = toolUses.find((tu) => tu.name === 'propose_changes')
     if (proposeChanges) {
-      emitProposedChanges(JSON.stringify(proposeChanges.input), sendEvent)
+      emitProposedChanges(
+        proposeChanges.id,
+        JSON.stringify(proposeChanges.input),
+        sendEvent,
+      )
       sendEvent({ type: 'done' })
       return
     }
@@ -355,6 +365,7 @@ async function handleCredentialsChat(
 // ---------------------------------------------------------------------------
 
 function emitProposedChanges(
+  toolUseId: string,
   toolInput: string,
   sendEvent: (data: Record<string, unknown>) => void,
 ) {
@@ -369,7 +380,12 @@ function emitProposedChanges(
         status: 'pending',
       }),
     )
-    sendEvent({ type: 'tool_use', proposedChanges: changes })
+    sendEvent({
+      type: 'tool_use',
+      proposedChanges: changes,
+      toolUseId,
+      toolUseInput: parsed,
+    })
   } catch {
     sendEvent({
       type: 'error',

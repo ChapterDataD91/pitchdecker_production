@@ -8,12 +8,14 @@ import { NextResponse } from 'next/server'
 import { getClaudeClient } from '@/lib/ai/claude-client'
 import {
   getSearchProfileStarterSystemPrompt,
+  withLanguage,
   type SearchProfileStarterContext,
 } from '@/lib/ai/prompts'
-import type { Weight } from '@/lib/types'
+import type { Locale, Weight } from '@/lib/types'
 
 interface SuggestRequest {
   deckContext: SearchProfileStarterContext
+  locale?: Locale
 }
 
 interface DraftCriterion {
@@ -114,7 +116,10 @@ export async function POST(request: Request) {
     }
 
     const claude = getClaudeClient()
-    const systemPrompt = getSearchProfileStarterSystemPrompt(body.deckContext)
+    const systemPrompt = withLanguage(
+      getSearchProfileStarterSystemPrompt(body.deckContext),
+      body.locale,
+    )
 
     const response = await claude.messages.create({
       model: 'claude-opus-4-6',

@@ -82,7 +82,7 @@ export default function CredentialsEditor({ data, onChange }: CredentialsEditorP
       const res = await fetchWithRetry('/api/ai/credentials/find-placements', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ axis, deckContext }),
+        body: JSON.stringify({ axis, deckContext, locale: deck?.locale ?? 'nl' }),
       })
       if (!res.ok) {
         const payload = (await res.json().catch(() => ({}))) as { error?: string }
@@ -180,6 +180,7 @@ export default function CredentialsEditor({ data, onChange }: CredentialsEditorP
               extractedText: d.extractedText,
             })),
           },
+          locale: deck.locale,
         }),
       })
 

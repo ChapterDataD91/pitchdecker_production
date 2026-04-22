@@ -19,7 +19,7 @@ import LoadingDots from '@/components/ui/LoadingDots'
 import PublishModal, { type PublishMode } from '@/components/ui/PublishModal'
 import DeploymentMenu from '@/components/ui/DeploymentMenu'
 import { SECTIONS, type SectionId } from '@/lib/theme'
-import type { PublishedDeployment, SectionStatuses } from '@/lib/types'
+import type { Locale, PublishedDeployment, SectionStatuses } from '@/lib/types'
 
 interface CandidateEntry {
   slug: string
@@ -40,6 +40,7 @@ interface PreviewShellProps {
   deckId: string
   deckTitle: string
   clientName: string
+  locale: Locale
   sectionStatuses: SectionStatuses
   mainHtml: string
   candidates: CandidateEntry[]
@@ -56,6 +57,7 @@ export default function PreviewShell({
   deckId,
   deckTitle,
   clientName,
+  locale,
   sectionStatuses,
   mainHtml,
   candidates,
@@ -81,14 +83,14 @@ export default function PreviewShell({
     const empties: string[] = []
     for (const section of SECTIONS) {
       const status = sectionStatuses[section.id as SectionId]
-      if (status === 'empty') empties.push(section.label)
+      if (status === 'empty') empties.push(section.label[locale])
     }
     return {
       completeCount: total - empties.length,
       totalCount: total,
       emptyLabels: empties,
     }
-  }, [sectionStatuses])
+  }, [sectionStatuses, locale])
 
   const isComplete = emptyLabels.length === 0
 

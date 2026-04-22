@@ -27,6 +27,10 @@ export type Weight = 1 | 2 | 3 | 4 | 5
  */
 export type HoganPillarKey = 'HPI' | 'HDS' | 'MVPI'
 
+/** Language the deck is authored in. Drives UI labels, AI output language,
+ *  and the published deck's headers. Defaults to 'nl' for new decks. */
+export type Locale = 'en' | 'nl'
+
 // ---------------------------------------------------------------------------
 // Cover
 // ---------------------------------------------------------------------------
@@ -69,6 +73,8 @@ export interface TeamMember {
 export interface TeamSection {
   leadTeam: TeamMember[]
   network: TeamMember[]
+  /** When false, the section is omitted from the preview and published deck. Default true (absent = enabled). */
+  enabled?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +126,8 @@ export interface SearchProfileSection {
   mustHaves: Criterion[]
   niceToHaves: Criterion[]
   personalityProfile: PersonalityProfile
+  /** When false, the section is omitted from the preview and published deck. Default true (absent = enabled). */
+  enabled?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -134,6 +142,8 @@ export interface SalarySection {
   ltip: string
   benefits: string
   other: string
+  /** When false, the section is omitted from the preview and published deck. Default true (absent = enabled). */
+  enabled?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -166,6 +176,8 @@ export interface CredentialAxis {
 
 export interface CredentialsSection {
   axes: CredentialAxis[]
+  /** When false, the section is omitted from the preview and published deck. Default true (absent = enabled). */
+  enabled?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -194,6 +206,8 @@ export interface TimelineSection {
   totalWeeks: number
   /** Free-text confidentiality / process note rendered as a sand .gd block at the end. */
   confidentialityNote?: string
+  /** When false, the section is omitted from the preview and published deck. Default true (absent = enabled). */
+  enabled?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -269,6 +283,8 @@ export interface Persona {
 
 export interface PersonasSection {
   archetypes: Persona[]
+  /** When false, the section is omitted from the preview and published deck. Default true (absent = enabled). */
+  enabled?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -293,6 +309,8 @@ export interface ScorecardSection {
   leadership: ScorecardCriterion[]
   successFactors: ScorecardCriterion[]
   hiddenCategories?: ScorecardCategoryKey[]
+  /** When false, the section is omitted from the preview and published deck. Default true (absent = enabled). */
+  enabled?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -410,6 +428,8 @@ export interface FeeSection {
   addons: FeeAddon[]
   /** Free-text special terms (e.g. "25–50% discount on internally sourced candidates"). */
   specialTerms?: string
+  /** When false, the section is omitted from the preview and published deck. Default true (absent = enabled). */
+  enabled?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -465,6 +485,9 @@ export interface Deck {
   createdAt: string
   updatedAt: string
   status: DeckStatus
+  /** Language the deck is authored in. Drives editor UI, AI output, and
+   *  published deck headers. Defaults to 'nl' on decks predating this field. */
+  locale: Locale
   sectionStatuses: SectionStatuses
   sections: DeckSections
   publishedDeployment?: PublishedDeployment
@@ -613,6 +636,7 @@ export function createEmptyDeck(
     createdAt: now,
     updatedAt: now,
     status: 'draft',
+    locale: 'nl',
     sectionStatuses: emptySectionStatuses,
     sections: emptySections,
   }

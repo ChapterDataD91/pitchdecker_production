@@ -6,7 +6,8 @@
 
 import { NextResponse } from 'next/server'
 import { getClaudeClient } from '@/lib/ai/claude-client'
-import { getCredentialsAxesSystemPrompt } from '@/lib/ai/prompts'
+import { getCredentialsAxesSystemPrompt, withLanguage } from '@/lib/ai/prompts'
+import type { Locale } from '@/lib/types'
 
 interface SuggestAxesRequest {
   deckContext: {
@@ -15,6 +16,7 @@ interface SuggestAxesRequest {
     coverIntro?: string
     searchProfileSummary?: string
   }
+  locale?: Locale
 }
 
 interface DraftAxis {
@@ -75,7 +77,10 @@ export async function POST(request: Request) {
     }
 
     const claude = getClaudeClient()
-    const systemPrompt = getCredentialsAxesSystemPrompt(body.deckContext)
+    const systemPrompt = withLanguage(
+      getCredentialsAxesSystemPrompt(body.deckContext),
+      body.locale,
+    )
 
     const response = await claude.messages.create({
       model: 'claude-opus-4-6',

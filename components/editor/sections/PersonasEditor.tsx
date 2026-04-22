@@ -168,6 +168,7 @@ export default function PersonasEditor({ data, onChange }: PersonasEditorProps) 
               extractedText: d.extractedText,
             })),
           },
+          locale: deck.locale,
         }),
       })
 
@@ -249,6 +250,7 @@ export default function PersonasEditor({ data, onChange }: PersonasEditorProps) 
               extractedText: d.extractedText,
             })),
           },
+          locale: deck.locale,
         }),
       })
 

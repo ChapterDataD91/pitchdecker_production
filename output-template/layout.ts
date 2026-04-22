@@ -50,55 +50,76 @@ interface AccordionSectionDef {
   render: (deck: Deck, brand: Brand, slugMap: Map<string, string>) => string
 }
 
+// Every non-cover section can be toggled off in the editor. When off, we skip
+// it in both preview and publish — the consultant has made a deliberate choice
+// to omit it from the deck.
+const isDisabled = (deck: Deck, id: Exclude<SectionId, 'cover'>): boolean =>
+  (deck.sections[id] as { enabled?: boolean }).enabled === false
+
 export const ACCORDION_SECTIONS: AccordionSectionDef[] = [
   {
     id: 'team',
     title: 'Our Team for this search mandate',
+    skipInPublish: (deck) => isDisabled(deck, 'team'),
+    skipInPreview: (deck) => isDisabled(deck, 'team'),
     render: (deck, brand) => renderTeam(deck.sections.team, brand),
   },
   {
     id: 'searchProfile',
     title: 'Search Profile: Must-Haves & Nice-to-Haves',
+    skipInPublish: (deck) => isDisabled(deck, 'searchProfile'),
+    skipInPreview: (deck) => isDisabled(deck, 'searchProfile'),
     render: (deck, brand) => renderSearchProfile(deck.sections.searchProfile, brand),
   },
   {
     id: 'salary',
     title: 'Expected Salary Package',
+    skipInPublish: (deck) => isDisabled(deck, 'salary'),
+    skipInPreview: (deck) => isDisabled(deck, 'salary'),
     render: (deck, brand) => renderSalary(deck.sections.salary, brand),
   },
   {
     id: 'credentials',
     title: 'Credentials',
+    skipInPublish: (deck) => isDisabled(deck, 'credentials'),
+    skipInPreview: (deck) => isDisabled(deck, 'credentials'),
     render: (deck, brand) => renderCredentials(deck.sections.credentials, brand),
   },
   {
     id: 'timeline',
     title: 'Process & Timeline',
+    skipInPublish: (deck) => isDisabled(deck, 'timeline'),
+    skipInPreview: (deck) => isDisabled(deck, 'timeline'),
     render: (deck, brand) => renderTimeline(deck.sections.timeline, brand),
   },
   {
     id: 'assessment',
     title: 'Assessment',
     anchorId: 'assessment',
-    skipInPublish: (deck) => deck.sections.assessment.enabled === false,
+    skipInPublish: (deck) => isDisabled(deck, 'assessment'),
+    skipInPreview: (deck) => isDisabled(deck, 'assessment'),
     render: (deck, brand) => renderAssessment(deck.sections.assessment, brand),
   },
   {
     id: 'personas',
     title: 'Three Candidate Personas',
+    skipInPublish: (deck) => isDisabled(deck, 'personas'),
+    skipInPreview: (deck) => isDisabled(deck, 'personas'),
     render: (deck, brand) => renderPersonas(deck.sections.personas, brand),
   },
   {
     id: 'scorecard',
     title: 'Selection Scorecard',
+    skipInPublish: (deck) => isDisabled(deck, 'scorecard'),
+    skipInPreview: (deck) => isDisabled(deck, 'scorecard'),
     render: (deck, brand) => renderScorecard(deck.sections.scorecard, brand),
   },
   {
     id: 'candidates',
     title: 'Sample Candidates',
     anchorId: 'candidates',
-    skipInPublish: (deck) => deck.sections.candidates.enabled === false,
-    skipInPreview: (deck) => deck.sections.candidates.enabled === false,
+    skipInPublish: (deck) => isDisabled(deck, 'candidates'),
+    skipInPreview: (deck) => isDisabled(deck, 'candidates'),
     render: (deck, brand, slugMap) =>
       renderCandidates(deck.sections.candidates, brand, slugMap),
   },
@@ -106,6 +127,8 @@ export const ACCORDION_SECTIONS: AccordionSectionDef[] = [
     id: 'fee',
     title: 'Fee Proposal',
     bodyClassExtra: 'sb--centered',
+    skipInPublish: (deck) => isDisabled(deck, 'fee'),
+    skipInPreview: (deck) => isDisabled(deck, 'fee'),
     render: (deck, brand) => renderFee(deck.sections.fee, brand),
   },
 ]

@@ -7,9 +7,12 @@
 import { NextResponse } from 'next/server'
 import type Anthropic from '@anthropic-ai/sdk'
 import { getClaudeClient } from '@/lib/ai/claude-client'
-import { getCredentialsSourcingSystemPrompt } from '@/lib/ai/prompts'
+import {
+  getCredentialsSourcingSystemPrompt,
+  withLanguage,
+} from '@/lib/ai/prompts'
 import { getCiceroClient } from '@/lib/mcp/cicero-client'
-import type { CredentialAxis } from '@/lib/types'
+import type { CredentialAxis, Locale } from '@/lib/types'
 
 const MAX_ITERATIONS = 8
 const TOOL_TIMEOUT_MS = 15_000
@@ -21,6 +24,7 @@ interface FindPlacementsRequest {
     roleTitle: string
     coverIntro?: string
   }
+  locale?: Locale
 }
 
 export interface ClientPlacement {
@@ -194,10 +198,13 @@ export async function POST(request: Request) {
     ]
 
     // 3. Build system prompt and initial message
-    const systemPrompt = getCredentialsSourcingSystemPrompt({
-      ...body.deckContext,
-      axis: body.axis,
-    })
+    const systemPrompt = withLanguage(
+      getCredentialsSourcingSystemPrompt({
+        ...body.deckContext,
+        axis: body.axis,
+      }),
+      body.locale,
+    )
 
     const claude = getClaudeClient()
     const messages: Anthropic.Messages.MessageParam[] = [

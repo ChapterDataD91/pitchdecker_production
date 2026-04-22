@@ -69,11 +69,14 @@ export function buildChatContext(
   activeSection: SectionId,
   documents: DeckDocument[],
 ): ChatContext {
+  // Deck summary is fed to Claude; use English labels here because the
+  // surrounding system prompt is in English — Claude reads this, the consultant
+  // doesn't. The deck's own locale drives the *response* language separately.
   const deckSummary = SECTIONS.map((s) => {
     const data = deck.sections[s.id as keyof DeckSections]
     const summary = summarizeSection(s.id, data)
     const active = s.id === activeSection ? ' (active)' : ''
-    return `- ${s.label}${active}: ${summary}`
+    return `- ${s.label.en}${active}: ${summary}`
   }).join('\n')
 
   const uploadedDocuments = documents.map((doc) => ({

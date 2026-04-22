@@ -6,11 +6,16 @@
 
 import { NextResponse } from 'next/server'
 import { getClaudeClient } from '@/lib/ai/claude-client'
-import { getPersonasSystemPrompt, type PersonasContext } from '@/lib/ai/prompts'
-import type { PersonaPoolSize } from '@/lib/types'
+import {
+  getPersonasSystemPrompt,
+  withLanguage,
+  type PersonasContext,
+} from '@/lib/ai/prompts'
+import type { Locale, PersonaPoolSize } from '@/lib/types'
 
 interface SuggestPersonasRequest {
   deckContext: PersonasContext
+  locale?: Locale
 }
 
 interface DraftPersona {
@@ -84,7 +89,10 @@ export async function POST(request: Request) {
     }
 
     const claude = getClaudeClient()
-    const systemPrompt = getPersonasSystemPrompt(body.deckContext)
+    const systemPrompt = withLanguage(
+      getPersonasSystemPrompt(body.deckContext),
+      body.locale,
+    )
 
     const response = await claude.messages.create({
       model: 'claude-opus-4-6',

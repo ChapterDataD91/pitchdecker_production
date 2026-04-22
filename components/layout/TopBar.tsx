@@ -8,6 +8,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
+import type { Locale } from '@/lib/types'
 
 type SaveStatus = 'saved' | 'saving' | 'error' | 'idle'
 
@@ -17,6 +18,8 @@ interface TopBarProps {
   completedSections: number
   totalSections: number
   saveStatus: SaveStatus
+  locale: Locale
+  onLocaleChange: (locale: Locale) => void
   onBack: () => void
 }
 
@@ -33,6 +36,8 @@ export default function TopBar({
   completedSections,
   totalSections,
   saveStatus,
+  locale,
+  onLocaleChange,
   onBack,
 }: TopBarProps) {
   const [isEditing, setIsEditing] = useState(false)
@@ -120,9 +125,14 @@ export default function TopBar({
 
         {/* Section completion count */}
         <span className="hidden shrink-0 text-xs text-text-tertiary sm:inline">
-          {completedSections} of {totalSections} sections
+          {locale === 'nl'
+            ? `${completedSections} van ${totalSections} stappen`
+            : `${completedSections} of ${totalSections} sections`}
         </span>
       </div>
+
+      {/* Locale toggle — two-segment pill */}
+      <LocaleToggle locale={locale} onChange={onLocaleChange} />
 
       {/* Save status indicator */}
       {saveStatus !== 'idle' && (
@@ -144,5 +154,52 @@ export default function TopBar({
         </div>
       )}
     </header>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// LocaleToggle — two-segment pill (EN | NL). Drives deck.locale.
+// ---------------------------------------------------------------------------
+
+function LocaleToggle({
+  locale,
+  onChange,
+}: {
+  locale: Locale
+  onChange: (next: Locale) => void
+}) {
+  const options: Locale[] = ['en', 'nl']
+  return (
+    <div
+      role="group"
+      aria-label="Deck language"
+      className="relative flex shrink-0 items-center rounded-md border border-border bg-bg-subtle p-0.5 text-[11px] font-medium"
+    >
+      {options.map((opt) => {
+        const isActive = opt === locale
+        return (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onChange(opt)}
+            aria-pressed={isActive}
+            className={`relative z-10 flex h-6 w-8 items-center justify-center rounded-[4px] uppercase tracking-wide transition-colors ${
+              isActive
+                ? 'text-text'
+                : 'text-text-tertiary hover:text-text-secondary'
+            }`}
+          >
+            {isActive && (
+              <motion.span
+                layoutId="locale-pill"
+                className="absolute inset-0 rounded-[4px] bg-bg shadow-xs"
+                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              />
+            )}
+            <span className="relative z-10">{opt}</span>
+          </button>
+        )
+      })}
+    </div>
   )
 }

@@ -1,12 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { AISectionContext } from '@/lib/ai-types'
+import type { Locale } from '@/lib/types'
 import { analyzeWithWebSearch } from '@/lib/ai/claude-client'
-import { getAnalysisSystemPrompt, getWebSearchPrompt } from '@/lib/ai/prompts'
+import {
+  getAnalysisSystemPrompt,
+  getWebSearchPrompt,
+  withLanguage,
+} from '@/lib/ai/prompts'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { query, context, instruction } = body as { query: string; context: AISectionContext; instruction?: string }
+    const { query, context, instruction, locale } = body as {
+      query: string
+      context: AISectionContext
+      instruction?: string
+      locale?: Locale
+    }
 
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
       return NextResponse.json(
@@ -22,7 +32,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const systemPrompt = getAnalysisSystemPrompt(context)
+    const systemPrompt = withLanguage(getAnalysisSystemPrompt(context), locale)
     const webSearchQuery = instruction
       ? `${getWebSearchPrompt(context)}\n\nAdditional instruction from the consultant: ${instruction}`
       : getWebSearchPrompt(context)

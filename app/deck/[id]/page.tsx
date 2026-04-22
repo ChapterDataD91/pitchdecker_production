@@ -46,6 +46,30 @@ const SECTION_EDITORS: Record<SectionId, React.ComponentType<{ data: DeckSection
   fee: FeeEditor as React.ComponentType<{ data: DeckSections[keyof DeckSections]; onChange: (data: DeckSections[keyof DeckSections]) => void }>,
 }
 
+// Cover is always part of the deck — it becomes the hero/header. Every other
+// section can be toggled off, in which case the editor body is hidden and the
+// section is skipped in preview + publish.
+const TOGGLEABLE_SECTIONS = new Set<SectionId>([
+  'team',
+  'searchProfile',
+  'salary',
+  'credentials',
+  'timeline',
+  'assessment',
+  'personas',
+  'scorecard',
+  'candidates',
+  'fee',
+])
+
+function isSectionEnabled(
+  sectionId: SectionId,
+  section: DeckSections[keyof DeckSections],
+): boolean {
+  if (!TOGGLEABLE_SECTIONS.has(sectionId)) return true
+  return (section as { enabled?: boolean }).enabled !== false
+}
+
 export default function DeckEditorPage({
   params,
 }: {
@@ -65,6 +89,7 @@ export default function DeckEditorPage({
     updateSection,
     setLoading,
     setError,
+    setLocale,
     getSectionStatus,
     getCompletedCount,
   } = useEditorStore()
@@ -128,10 +153,13 @@ export default function DeckEditorPage({
   // Global keyboard shortcuts: ⌘K palette, ⌘J AI panel
   const { paletteOpen, closePalette } = useGlobalShortcuts()
 
+  // Resolve section labels in the deck's language
+  const locale = deck?.locale ?? 'nl'
+
   // Build sidebar section data
   const sidebarSections = SECTIONS.map((section) => ({
     id: section.id,
-    label: section.label,
+    label: section.label[locale],
     status: getSectionStatus(section.id),
   }))
 
@@ -248,6 +276,8 @@ export default function DeckEditorPage({
         completedSections={completedCount}
         totalSections={SECTIONS.length}
         saveStatus={saveStatus}
+        locale={deck.locale}
+        onLocaleChange={setLocale}
         onBack={() => router.push('/')}
       />
 
@@ -278,16 +308,42 @@ export default function DeckEditorPage({
                 {activeSectionMeta && (
                   <SectionHeader
                     number={activeSectionMeta.order}
-                    title={activeSectionMeta.label}
-                    description={activeSectionMeta.description}
+                    title={activeSectionMeta.label[locale]}
+                    description={activeSectionMeta.description[locale]}
+                    enabled={
+                      TOGGLEABLE_SECTIONS.has(activeSection)
+                        ? isSectionEnabled(
+                            activeSection,
+                            deck.sections[activeSection as keyof DeckSections],
+                          )
+                        : undefined
+                    }
+                    onToggleEnabled={
+                      TOGGLEABLE_SECTIONS.has(activeSection)
+                        ? (next) =>
+                            updateSection(
+                              activeSection as keyof DeckSections,
+                              { enabled: next } as Partial<
+                                DeckSections[keyof DeckSections]
+                              >,
+                            )
+                        : undefined
+                    }
                   />
                 )}
 
-                {/* Section editor */}
-                <ActiveEditor
-                  data={deck.sections[activeSection as keyof DeckSections]}
-                  onChange={handleSectionChange}
-                />
+                {/* Section editor — hidden when section is excluded */}
+                {isSectionEnabled(
+                  activeSection,
+                  deck.sections[activeSection as keyof DeckSections],
+                ) ? (
+                  <ActiveEditor
+                    data={deck.sections[activeSection as keyof DeckSections]}
+                    onChange={handleSectionChange}
+                  />
+                ) : (
+                  <ExcludedSectionNotice />
+                )}
               </motion.div>
             </AnimatePresence>
           </div>
@@ -306,6 +362,17 @@ export default function DeckEditorPage({
 
       {/* Command palette — ⌘K */}
       <CommandPalette open={paletteOpen} onClose={closePalette} deckId={id} />
+    </div>
+  )
+}
+
+// Muted card shown in place of the editor body when a section is excluded.
+// Keeps the toggle in the header as the single affordance to re-include.
+function ExcludedSectionNotice() {
+  return (
+    <div className="rounded-lg border border-dashed border-border bg-bg-subtle px-5 py-4 text-sm text-text-tertiary">
+      This section is excluded — it won&apos;t appear in the preview or the
+      published deck. Flip the switch above to include it again.
     </div>
   )
 }

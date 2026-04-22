@@ -6,9 +6,11 @@
 
 import { NextResponse } from 'next/server'
 import { getClaudeClient } from '@/lib/ai/claude-client'
+import { withLanguage } from '@/lib/ai/prompts'
 import type {
   Candidate,
   CandidateScore,
+  Locale,
   ScorecardSection,
   ScorecardCriterion,
 } from '@/lib/types'
@@ -31,6 +33,7 @@ interface ScoreRequest {
     roleTitle: string
     coverIntro?: string
   }
+  locale?: Locale
 }
 
 interface DraftScore {
@@ -181,7 +184,10 @@ export async function POST(request: Request) {
     }
 
     const claude = getClaudeClient()
-    const systemPrompt = buildSystemPrompt(criteria, body.deckContext)
+    const systemPrompt = withLanguage(
+      buildSystemPrompt(criteria, body.deckContext),
+      body.locale,
+    )
 
     const response = await claude.messages.create({
       model: 'claude-opus-4-6',

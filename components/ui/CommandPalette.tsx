@@ -55,6 +55,7 @@ function PaletteContent({
   const router = useRouter()
   const setActiveSection = useEditorStore((s) => s.setActiveSection)
   const activeSection = useEditorStore((s) => s.activeSection)
+  const locale = useEditorStore((s) => s.deck?.locale ?? 'nl')
 
   const [query, setQuery] = useState('')
   const [highlightIndex, setHighlightIndex] = useState(0)
@@ -62,10 +63,11 @@ function PaletteContent({
   const listRef = useRef<HTMLUListElement | null>(null)
 
   const commands: Command[] = useMemo(() => {
+    const goToPrefix = locale === 'nl' ? 'Naar' : 'Go to'
     const sectionCommands: Command[] = SECTIONS.map((section) => ({
       id: `section:${section.id}`,
-      label: `Go to ${section.label}`,
-      hint: section.description,
+      label: `${goToPrefix} ${section.label[locale]}`,
+      hint: section.description[locale],
       group: 'Sections',
       icon: <SectionGlyph order={section.order} />,
       run: () => {
@@ -114,7 +116,7 @@ function PaletteContent({
     ]
 
     return [...sectionCommands, ...deckCommands, ...aiCommands]
-  }, [deckId, router, setActiveSection, onClose])
+  }, [deckId, router, setActiveSection, onClose, locale])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()

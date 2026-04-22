@@ -6,7 +6,8 @@
 
 import { NextResponse } from 'next/server'
 import { getClaudeClient } from '@/lib/ai/claude-client'
-import { getTimelineSystemPrompt } from '@/lib/ai/prompts'
+import { getTimelineSystemPrompt, withLanguage } from '@/lib/ai/prompts'
+import type { Locale } from '@/lib/types'
 
 interface SuggestPhasesRequest {
   deckContext: {
@@ -15,6 +16,7 @@ interface SuggestPhasesRequest {
     coverIntro?: string
     searchProfileSummary?: string
   }
+  locale?: Locale
 }
 
 interface DraftPhase {
@@ -77,7 +79,10 @@ export async function POST(request: Request) {
     }
 
     const claude = getClaudeClient()
-    const systemPrompt = getTimelineSystemPrompt(body.deckContext)
+    const systemPrompt = withLanguage(
+      getTimelineSystemPrompt(body.deckContext),
+      body.locale,
+    )
 
     const response = await claude.messages.create({
       model: 'claude-opus-4-6',

@@ -62,10 +62,11 @@ export function useAIPanel(context: AISectionContext): UseAIPanelReturn {
       store.setToolsAnalyzingText(true)
       store.setToolsError(null)
       try {
+        const locale = useEditorStore.getState().deck?.locale ?? 'nl'
         const res = await fetch('/api/ai/analyze-text', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, context, instruction }),
+          body: JSON.stringify({ text, context, instruction, locale }),
         })
         if (!res.ok) {
           throw new Error(`Analysis failed: ${res.statusText}`)
@@ -88,9 +89,11 @@ export function useAIPanel(context: AISectionContext): UseAIPanelReturn {
       store.setToolsAnalyzingDocument(true)
       store.setToolsError(null)
       try {
+        const locale = useEditorStore.getState().deck?.locale ?? 'nl'
         const formData = new FormData()
         formData.append('file', file)
         formData.append('context', JSON.stringify(context))
+        formData.append('locale', locale)
         if (instruction) formData.append('instruction', instruction)
 
         const res = await fetch('/api/ai/analyze-document', {
@@ -151,10 +154,11 @@ export function useAIPanel(context: AISectionContext): UseAIPanelReturn {
       store.setToolsSearchingWeb(true)
       store.setToolsError(null)
       try {
+        const locale = useEditorStore.getState().deck?.locale ?? 'nl'
         const res = await fetch('/api/ai/web-search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query, context, instruction }),
+          body: JSON.stringify({ query, context, instruction, locale }),
         })
         if (!res.ok) {
           throw new Error(`Web search failed: ${res.statusText}`)
