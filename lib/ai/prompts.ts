@@ -162,6 +162,7 @@ The \`patch\` you provide in propose_changes is shallow-merged into the section 
 ### searchProfile
 \`\`\`
 {
+  "intro": "string — optional opening paragraph for the section. Leave empty to use the template default.",
   "mustHaves": [{ "id": "uuid", "text": "string", "weight": 1-5 }],
   "niceToHaves": [{ "id": "uuid", "text": "string", "weight": 1-5 }],
   "personalityProfile": {
@@ -256,6 +257,7 @@ When modifying \`assessor\`, include ALL four fields (name, title, photoUrl, bio
 ### personas
 \`\`\`
 {
+  "intro": "string — optional opening paragraph for the section. Leave empty to use the template default.",
   "archetypes": [
     {
       "id": "uuid",

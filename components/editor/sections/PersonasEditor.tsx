@@ -7,6 +7,7 @@ import type { Persona, PersonaPoolSize, PersonasSection } from '@/lib/types'
 import { useEditorStore } from '@/lib/store/editor-store'
 import { useAIStore } from '@/lib/store/ai-store'
 import LoadingDots from '@/components/ui/LoadingDots'
+import SectionIntroField from '@/components/editor/SectionIntroField'
 
 interface PersonasEditorProps {
   data: PersonasSection
@@ -70,6 +71,7 @@ function poolRank(size: PersonaPoolSize): number {
 
 export default function PersonasEditor({ data, onChange }: PersonasEditorProps) {
   const deck = useEditorStore((s) => s.deck)
+  const locale = deck?.locale ?? 'nl'
   const deckDocuments = useAIStore((s) => s.deckDocuments)
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [suggestError, setSuggestError] = useState<string | null>(null)
@@ -350,6 +352,17 @@ export default function PersonasEditor({ data, onChange }: PersonasEditorProps) 
 
       {/* Error */}
       {suggestError && <p className="text-xs text-red-600 px-1">{suggestError}</p>}
+
+      {hasPersonas && (
+        <SectionIntroField
+          value={data.intro}
+          onChange={(intro) => {
+            clearUndo()
+            onChange({ ...data, intro })
+          }}
+          locale={locale}
+        />
+      )}
 
       {/* Undo banner */}
       <AnimatePresence>

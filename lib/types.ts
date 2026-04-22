@@ -126,6 +126,8 @@ export interface SearchProfileSection {
   mustHaves: Criterion[]
   niceToHaves: Criterion[]
   personalityProfile: PersonalityProfile
+  /** Short lede that opens the section in the published deck. Falls back to the locale default when absent or empty. */
+  intro?: string
   /** When false, the section is omitted from the preview and published deck. Default true (absent = enabled). */
   enabled?: boolean
 }
@@ -283,6 +285,8 @@ export interface Persona {
 
 export interface PersonasSection {
   archetypes: Persona[]
+  /** Short lede that opens the section in the published deck. Falls back to the locale default when absent or empty. */
+  intro?: string
   /** When false, the section is omitted from the preview and published deck. Default true (absent = enabled). */
   enabled?: boolean
 }

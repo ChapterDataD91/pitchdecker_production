@@ -54,7 +54,10 @@ export function renderSearchProfile(
     return `<div class="ot-empty">${esc(strings.spEmpty)}</div>`
   }
 
-  return `<div class="cols">
+  const introText = data.intro?.trim() || strings.spLead
+  const lead = `<p>${esc(introText)}</p>`
+
+  return `${lead}<div class="cols">
   <div class="cd">
     <h4>${esc(strings.spMustHaves)}</h4>
     <ul>${renderCriteriaList(data.mustHaves, strings.spCriteriaPlaceholder)}</ul>

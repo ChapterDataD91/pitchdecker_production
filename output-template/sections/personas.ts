@@ -64,7 +64,8 @@ export function renderPersonas(
 
   const sorted = [...data.archetypes].sort((a, b) => a.order - b.order)
 
-  const lead = `<p>${esc(strings.personasLead)}</p>`
+  const leadText = data.intro?.trim() || strings.personasLead
+  const lead = `<p>${esc(leadText)}</p>`
   const cards = sorted.map((p) => renderPersona(p, strings)).join('\n')
 
   return `${lead}${cards}`

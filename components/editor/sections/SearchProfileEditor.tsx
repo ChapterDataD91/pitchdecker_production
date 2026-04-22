@@ -7,6 +7,7 @@ import { useEditorStore } from '@/lib/store/editor-store'
 import { useAIStore } from '@/lib/store/ai-store'
 import LoadingDots from '@/components/ui/LoadingDots'
 import WeightSelector from '@/components/ui/WeightSelector'
+import SectionIntroField from '@/components/editor/SectionIntroField'
 
 // The "Suggest starter profile" fetch and its loading/error/undo state live
 // in `ai-store` as a background task (key: `suggest-search-profile:{deckId}`)
@@ -28,6 +29,7 @@ function normalize(data: SearchProfileSection): SearchProfileSection {
       intro: data.personalityProfile?.intro ?? '',
       traits: data.personalityProfile?.traits ?? [],
     },
+    intro: data.intro,
   }
 }
 
@@ -85,6 +87,7 @@ export default function SearchProfileEditor({
 }: SearchProfileEditorProps) {
   const data = normalize(rawData)
   const deck = useEditorStore((s) => s.deck)
+  const locale = deck?.locale ?? 'nl'
   const taskKey = deck ? `suggest-search-profile:${deck.id}` : null
   const task = useAIStore((s) => (taskKey ? s.backgroundTasks[taskKey] : undefined))
   const suggestSearchProfile = useAIStore((s) => s.suggestSearchProfile)
@@ -229,6 +232,17 @@ export default function SearchProfileEditor({
       )}
 
       {suggestError && <p className="text-xs text-red-600 px-1">{suggestError}</p>}
+
+      {!empty && (
+        <SectionIntroField
+          value={data.intro}
+          onChange={(intro) => {
+            dismissUndoBanner()
+            onChange({ ...data, intro })
+          }}
+          locale={locale}
+        />
+      )}
 
       <AnimatePresence>
         {!empty && applied && (

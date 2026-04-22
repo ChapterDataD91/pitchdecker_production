@@ -56,6 +56,7 @@ export interface OutputStrings {
   teamEmpty: string
 
   // ----- Search Profile -----------------------------------------------------
+  spLead: string
   spMustHaves: string
   spNiceToHaves: string
   spPersonalityProfile: string
@@ -203,6 +204,8 @@ const en: OutputStrings = {
   teamNetwork: 'Building Upon Different Networks',
   teamEmpty: 'No team members added yet.',
 
+  spLead:
+    "To kick off the conversation, we're sharing a search profile — must-haves, nice-to-haves, and personality — based on your input and our experience.",
   spMustHaves: 'Must-Haves',
   spNiceToHaves: 'Nice-to-Haves',
   spPersonalityProfile: 'Personality Profile',
@@ -255,7 +258,7 @@ const en: OutputStrings = {
   poolFallback: 'Pool',
   personaUntitled: 'Untitled persona',
   personasLead:
-    'Anonymised candidate personas illustrating the type of leader we expect to identify for this role.',
+    "To kick off the conversation, we're sharing a set of candidate personas that illustrate the type of leader we expect to identify for this role.",
   personasEmpty: 'No persona archetypes added yet.',
 
   scMustHaves: 'Must-Haves',
@@ -361,6 +364,8 @@ const nl: OutputStrings = {
   teamNetwork: 'Via verschillende netwerken',
   teamEmpty: 'Nog geen teamleden toegevoegd.',
 
+  spLead:
+    'Om de dialoog op gang te helpen stellen we een zoekprofiel op van must-haves, nice-to-haves en persoonlijkheid, gebaseerd op jullie input en onze ervaring.',
   spMustHaves: 'Must-Haves',
   spNiceToHaves: 'Nice-to-Haves',
   spPersonalityProfile: 'Persoonlijkheidsprofiel',
@@ -413,7 +418,7 @@ const nl: OutputStrings = {
   poolFallback: 'Pool',
   personaUntitled: 'Persona zonder titel',
   personasLead:
-    "Geanonimiseerde kandidaat-persona's die illustreren welk type leider we verwachten te identificeren voor deze rol.",
+    "Om de dialoog op gang te helpen stellen we een aantal kandidaat-persona's voor die illustreren welk type leider we verwachten te identificeren voor deze rol.",
   personasEmpty: "Nog geen persona's toegevoegd.",
 
   scMustHaves: 'Must-Haves',
