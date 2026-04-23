@@ -1,8 +1,19 @@
 'use client'
 
-import { useRef, useState, type DragEvent } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import { resizeImage } from '@/lib/image-resize'
 import LoadingDots from './LoadingDots'
+
+export interface FocalPoint {
+  x: number
+  y: number
+}
 
 interface ImageUploadProps {
   value: string
@@ -12,6 +23,18 @@ interface ImageUploadProps {
   label: string
   hint: string
   aspectRatio?: string
+  /**
+   * When both `focalPoint` and `onFocalPointChange` are provided, the preview
+   * (after an image is uploaded) becomes a draggable focal-point picker that
+   * matches the output shape. Drag the image inside the frame to choose which
+   * part stays visible after the slant crop.
+   */
+  focalPoint?: FocalPoint
+  onFocalPointChange?: (point: FocalPoint) => void
+  /** Clip-path applied to the focal-point preview (matches the output slant). */
+  previewClipPath?: string
+  /** Aspect ratio of the focal-point preview (may differ from the drop-zone). */
+  previewAspectRatio?: string
 }
 
 const ACCEPT = 'image/png,image/jpeg,image/webp'
@@ -24,6 +47,10 @@ export default function ImageUpload({
   label,
   hint,
   aspectRatio,
+  focalPoint,
+  onFocalPointChange,
+  previewClipPath,
+  previewAspectRatio,
 }: ImageUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -91,6 +118,7 @@ export default function ImageUpload({
   }
 
   const hasImage = value.trim() !== ''
+  const focalMode = hasImage && focalPoint !== undefined && onFocalPointChange !== undefined
 
   return (
     <div>
@@ -98,8 +126,18 @@ export default function ImageUpload({
         {label}
       </label>
 
-      {hasImage ? (
-        // --- Preview state ---
+      {focalMode ? (
+        <FocalPointPreview
+          src={value}
+          focalPoint={focalPoint}
+          onFocalPointChange={onFocalPointChange}
+          aspectRatio={previewAspectRatio ?? aspectRatio ?? '2.4 / 1'}
+          clipPath={previewClipPath}
+          onReplace={() => inputRef.current?.click()}
+          onRemove={handleRemove}
+        />
+      ) : hasImage ? (
+        // --- Static preview (hero, logo) ---
         <div
           className="group relative cursor-pointer overflow-hidden rounded-xl border border-border transition-colors hover:border-border-strong"
           style={aspectRatio ? { aspectRatio } : undefined}
@@ -203,6 +241,184 @@ export default function ImageUpload({
           e.target.value = ''
         }}
       />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// FocalPointPreview — draggable image inside a slanted frame that mirrors the
+// output banner. Dragging updates `object-position` live; the new focal point
+// is committed (onChange) only on pointer-up so autosave isn't spammed.
+// ---------------------------------------------------------------------------
+
+interface FocalPointPreviewProps {
+  src: string
+  focalPoint: FocalPoint
+  onFocalPointChange: (point: FocalPoint) => void
+  aspectRatio: string
+  clipPath?: string
+  onReplace: () => void
+  onRemove: () => void
+}
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n))
+}
+
+function FocalPointPreview({
+  src,
+  focalPoint,
+  onFocalPointChange,
+  aspectRatio,
+  clipPath,
+  onReplace,
+  onRemove,
+}: FocalPointPreviewProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [livePoint, setLivePoint] = useState<FocalPoint>(focalPoint)
+  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const dragRef = useRef<{
+    startClientX: number
+    startClientY: number
+    startPoint: FocalPoint
+  } | null>(null)
+
+  // Sync external changes (e.g. after autosave round-trip) into live state when
+  // not in the middle of a drag.
+  useEffect(() => {
+    if (!dragRef.current) setLivePoint(focalPoint)
+  }, [focalPoint])
+
+  function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!naturalSize) return
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    dragRef.current = {
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startPoint: livePoint,
+    }
+    setIsDragging(true)
+  }
+
+  function handlePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current
+    if (!drag || !containerRef.current || !naturalSize) return
+
+    const rect = containerRef.current.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return
+
+    const imgRatio = naturalSize.w / naturalSize.h
+    const conRatio = rect.width / rect.height
+
+    // With object-fit: cover, only ONE axis overflows (the other fits exactly).
+    let overflowX = 0
+    let overflowY = 0
+    if (imgRatio > conRatio) {
+      // Image is wider than container → overflows horizontally.
+      const scaledW = rect.height * imgRatio
+      overflowX = scaledW - rect.width
+    } else {
+      // Image is narrower → overflows vertically.
+      const scaledH = rect.width / imgRatio
+      overflowY = scaledH - rect.height
+    }
+
+    const dx = e.clientX - drag.startClientX
+    const dy = e.clientY - drag.startClientY
+
+    // Dragging right (+dx) reveals the LEFT side of the image → lower X%.
+    const deltaXPct = overflowX > 0 ? (-dx / overflowX) * 100 : 0
+    const deltaYPct = overflowY > 0 ? (-dy / overflowY) * 100 : 0
+
+    setLivePoint({
+      x: clamp(drag.startPoint.x + deltaXPct, 0, 100),
+      y: clamp(drag.startPoint.y + deltaYPct, 0, 100),
+    })
+  }
+
+  function handlePointerUp(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!dragRef.current) return
+    e.currentTarget.releasePointerCapture(e.pointerId)
+    const committed = livePoint
+    dragRef.current = null
+    setIsDragging(false)
+    if (committed.x !== focalPoint.x || committed.y !== focalPoint.y) {
+      onFocalPointChange(committed)
+    }
+  }
+
+  const canDrag = naturalSize !== null
+
+  return (
+    <div className="group relative">
+      <div
+        ref={containerRef}
+        className="relative overflow-hidden bg-bg-muted select-none touch-none"
+        style={{
+          aspectRatio,
+          clipPath,
+          cursor: !canDrag ? 'default' : isDragging ? 'grabbing' : 'grab',
+        }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt="Banner preview"
+          draggable={false}
+          onLoad={(e) => {
+            const img = e.currentTarget
+            setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight })
+          }}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            objectPosition: `${livePoint.x}% ${livePoint.y}%`,
+            pointerEvents: 'none',
+            userSelect: 'none',
+          }}
+        />
+
+        {/* Drag hint — fades in on hover, hides while dragging */}
+        <div
+          className={`pointer-events-none absolute inset-0 flex items-center justify-center transition-opacity ${
+            isDragging ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'
+          }`}
+        >
+          <span className="rounded-full bg-black/55 px-3 py-1 text-xs font-medium text-white shadow-sm">
+            Drag to reposition
+          </span>
+        </div>
+      </div>
+
+      {/* Action buttons — positioned outside the clipped container so they're
+          fully visible in corners that the clip-path would otherwise cut off. */}
+      <div className="pointer-events-none absolute right-3 top-3 flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+        <button
+          type="button"
+          onClick={onReplace}
+          className="pointer-events-auto rounded-md bg-white/95 px-2.5 py-1 text-xs font-medium text-text-secondary shadow-sm hover:bg-white hover:text-text"
+          aria-label="Replace banner"
+        >
+          Replace
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md bg-white/95 text-text-secondary shadow-sm hover:bg-white hover:text-error"
+          aria-label="Remove banner"
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
     </div>
   )
 }

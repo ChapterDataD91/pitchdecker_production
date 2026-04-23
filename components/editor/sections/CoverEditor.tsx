@@ -358,8 +358,14 @@ export default function CoverEditor({ data, onChange }: CoverEditorProps) {
             deckId={deckId}
             field="banner"
             label="Banner Image"
-            hint="Wide landscape. The center of the image will be visible in the diagonal bar."
+            hint="Wide landscape. Drag the image to choose which part shows inside the slant."
             aspectRatio="48/10"
+            focalPoint={data.bannerImageFocalPoint ?? { x: 50, y: 50 }}
+            onFocalPointChange={(point) =>
+              onChange({ ...data, bannerImageFocalPoint: point })
+            }
+            previewAspectRatio="2.4 / 1"
+            previewClipPath="polygon(0 20%, 100% 0, 100% 80%, 0 100%)"
           />
 
           <ImageUpload

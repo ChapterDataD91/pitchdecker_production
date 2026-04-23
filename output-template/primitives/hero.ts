@@ -199,8 +199,11 @@ export function renderHero(deck: Deck, brand: Brand, strings: OutputStrings): st
     ? `<img src="${escAttr(cover.heroImageUrl)}" alt="${escAttr(cover.roleTitle)}">`
     : `<div class="hero-placeholder">${esc(strings.heroImagePlaceholder)}</div>`
 
+  const fp = cover.bannerImageFocalPoint
+  const fpX = fp ? Math.max(0, Math.min(100, fp.x)) : 50
+  const fpY = fp ? Math.max(0, Math.min(100, fp.y)) : 50
   const banner = cover.bannerImageUrl && cover.bannerImageUrl.trim() !== ''
-    ? `<div class="hero-banner"><img src="${escAttr(cover.bannerImageUrl)}" alt="${escAttr(cover.clientName)}"></div>`
+    ? `<div class="hero-banner"><img src="${escAttr(cover.bannerImageUrl)}" alt="${escAttr(cover.clientName)}" style="object-position:${fpX}% ${fpY}%"></div>`
     : `<div class="hero-banner"><div class="hero-banner-placeholder"></div></div>`
 
   const tagline = cover.tagline?.trim()

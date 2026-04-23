@@ -53,6 +53,8 @@ export interface CoverSection {
   clientLogoUrl?: string
   /** Wide banner image displayed full-width below the hero. Optional; section omits the band if absent. */
   bannerImageUrl?: string
+  /** Focal point for the banner image, as percentages (0–100). Drives `object-position` so the consultant can choose which part of the source image is visible in the slanted frame. Defaults to { x: 50, y: 50 } when absent. */
+  bannerImageFocalPoint?: { x: number; y: number }
   stats: CoverStats
 }
 
